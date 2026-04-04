@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="styles.css">
+    <title>Base44 Apps Portal</title>
+</head>
+<body>
+    <div class="navbar">
+        <div class="navbar-brand">Base44 Apps Portal</div>
+        <div class="navbar-menu">
+            <a href="index.html" class="nav-link active">Home</a>
+            <a href="dashboard.html" class="nav-link">My Apps</a>
+            <a href="subscriptions.html" class="nav-link">Subscriptions</a>
+            <a href="admin.html" class="nav-link admin-only">Admin</a>
+            <a href="#" onclick="logout()" class="nav-link">Logout</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <section class="hero">
+            <h1>Welcome to Base44 Apps Portal</h1>
+            <p>Manage and access your favorite web applications</p>
+        </section>
+
+        <section class="recent-apps">
+            <h2>Your Recent Apps</h2>
+            <div id="recent-apps-list" class="apps-grid">
+                <div class="loading">Loading your apps...</div>
+            </div>
+        </section>
+
+        <section class="featured-apps">
+            <h2>Featured Apps</h2>
+            <div id="featured-apps-list" class="apps-grid">
+                <div class="loading">Loading featured apps...</div>
+            </div>
+        </section>
+    </div>
+
+    <footer>
+        <p>&copy; 2026 Base44 Apps Portal. All rights reserved.</p>
+    </footer>
+
+    <script src="auth.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
