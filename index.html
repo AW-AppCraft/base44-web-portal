@@ -3,44 +3,138 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="styles.css">
     <title>Base44 Apps Portal</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="navbar">
-        <div class="navbar-brand">Base44 Apps Portal</div>
-        <div class="navbar-menu">
-            <a href="index.html" class="nav-link active">Home</a>
-            <a href="dashboard.html" class="nav-link">My Apps</a>
-            <a href="subscriptions.html" class="nav-link">Subscriptions</a>
-            <a href="admin.html" class="nav-link admin-only">Admin</a>
-            <a href="#" onclick="logout()" class="nav-link">Logout</a>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-brand">
+                <i class="fas fa-rocket"></i> Base44 Apps Portal
+            </div>
+            <div class="navbar-menu" id="navbarMenu">
+                <a href="index.html" class="nav-link active"><i class="fas fa-home"></i> Home</a>
+                <a href="dashboard.html" class="nav-link"><i class="fas fa-th-large"></i> My Apps</a>
+                <a href="subscriptions.html" class="nav-link"><i class="fas fa-credit-card"></i> Subscriptions</a>
+                <a href="admin.html" class="nav-link admin-only"><i class="fas fa-cog"></i> Admin</a>
+                <a href="#" onclick="logout()" class="nav-link logout-btn"><i class="fas fa-sign-out-alt"></i> Logout</a>
+            </div>
+            <div class="hamburger" id="hamburger">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
         </div>
-    </div>
+    </nav>
 
-    <div class="container">
-        <section class="hero">
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content">
             <h1>Welcome to Base44 Apps Portal</h1>
-            <p>Manage and access your favorite web applications</p>
-        </section>
+            <p>Discover, manage, and subscribe to powerful web applications</p>
+            <a href="subscriptions.html" class="btn btn-primary btn-lg">Explore Apps</a>
+        </div>
+    </section>
 
-        <section class="recent-apps">
-            <h2>Your Recent Apps</h2>
-            <div id="recent-apps-list" class="apps-grid">
-                <div class="loading">Loading your apps...</div>
+    <!-- Recent Apps Section -->
+    <section class="container recent-apps-section">
+        <div class="section-header">
+            <h2><i class="fas fa-clock"></i> Your Recent Apps</h2>
+            <p>Quick access to your most recently used applications</p>
+        </div>
+        <div class="apps-grid" id="recent-apps-list">
+            <div class="empty-state">
+                <i class="fas fa-inbox"></i>
+                <p>No recent apps yet. Start exploring!</p>
             </div>
-        </section>
+        </div>
+    </section>
 
-        <section class="featured-apps">
-            <h2>Featured Apps</h2>
-            <div id="featured-apps-list" class="apps-grid">
-                <div class="loading">Loading featured apps...</div>
+    <!-- Featured Apps Section -->
+    <section class="container featured-apps-section">
+        <div class="section-header">
+            <h2><i class="fas fa-star"></i> Featured Apps</h2>
+            <p>Check out our most popular applications</p>
+        </div>
+        <div class="apps-grid" id="featured-apps-list">
+            <div class="app-card">
+                <div class="app-icon"><i class="fas fa-chart-bar"></i></div>
+                <h3>Analytics Pro</h3>
+                <p>Advanced analytics and reporting tools</p>
+                <span class="badge">Popular</span>
+                <button class="btn btn-secondary">Learn More</button>
             </div>
-        </section>
-    </div>
+            <div class="app-card">
+                <div class="app-icon"><i class="fas fa-shield-alt"></i></div>
+                <h3>Security Suite</h3>
+                <p>Enterprise-grade security solutions</p>
+                <span class="badge">Trusted</span>
+                <button class="btn btn-secondary">Learn More</button>
+            </div>
+            <div class="app-card">
+                <div class="app-icon"><i class="fas fa-cogs"></i></div>
+                <h3>Automation Hub</h3>
+                <p>Automate your workflow efficiently</p>
+                <span class="badge">New</span>
+                <button class="btn btn-secondary">Learn More</button>
+            </div>
+            <div class="app-card">
+                <div class="app-icon"><i class="fas fa-users"></i></div>
+                <h3>Collaboration Tools</h3>
+                <p>Team communication and project management</p>
+                <span class="badge">Featured</span>
+                <button class="btn btn-secondary">Learn More</button>
+            </div>
+        </div>
+    </section>
 
-    <footer>
-        <p>&copy; 2026 Base44 Apps Portal. All rights reserved.</p>
+    <!-- CTA Section -->
+    <section class="cta-section">
+        <div class="cta-content">
+            <h2>Ready to transform your workflow?</h2>
+            <p>Join thousands of satisfied users already using Base44 Apps</p>
+            <a href="subscriptions.html" class="btn btn-primary btn-lg">Browse All Apps</a>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-section">
+                <h4><i class="fas fa-rocket"></i> Base44 Apps</h4>
+                <p>Your ultimate platform for discovering and managing web applications.</p>
+            </div>
+            <div class="footer-section">
+                <h4>Quick Links</h4>
+                <ul>
+                    <li><a href="index.html">Home</a></li>
+                    <li><a href="dashboard.html">Dashboard</a></li>
+                    <li><a href="subscriptions.html">Apps</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h4>Support</h4>
+                <ul>
+                    <li><a href="#">Contact Us</a></li>
+                    <li><a href="#">Documentation</a></li>
+                    <li><a href="#">FAQ</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h4>Follow Us</h4>
+                <div class="social-links">
+                    <a href="#"><i class="fab fa-facebook"></i></a>
+                    <a href="#"><i class="fab fa-twitter"></i></a>
+                    <a href="#"><i class="fab fa-linkedin"></i></a>
+                    <a href="#"><i class="fab fa-github"></i></a>
+                </div>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2026 Base44 Apps Portal. All rights reserved. | <a href="#">Privacy Policy</a> | <a href="#">Terms of Service</a></p>
+        </div>
     </footer>
 
     <script src="auth.js"></script>
