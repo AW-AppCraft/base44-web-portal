@@ -83,6 +83,7 @@ Private Sub BuildPanel(ws As Worksheet, anchor As String, full As Boolean)
     y = y0
 
     y = y + Header(ws, "ACTIONS", x0, y, BW)
+    y = y + AddButton(ws, "Preview Import", "SPC_ImportPreview", x0, y, BW, BH, RGB(31, 78, 121)) + GAPY
     y = y + AddButton(ws, "Import Now", "SPC_ImportNow", x0, y, BW, BH, RGB(0, 130, 60)) + GAPY
     y = y + AddButton(ws, "Start Monitoring", "SPC_StartMonitor", x0, y, BW, BH, RGB(0, 130, 60)) + GAPY
     y = y + AddButton(ws, "Stop Monitoring", "SPC_StopMonitor", x0, y, BW, BH, RGB(170, 40, 40)) + GAPY
@@ -183,6 +184,104 @@ Sub SPC_StopMonitor()
     CancelNext
     SetStatus "STOPPED", RGB(255, 80, 80)
 End Sub
+
+' ============================================================
+' PREVIEW - read the watch folder and report what WOULD be imported,
+' without writing anything to Data Entry. Use this on a new source
+' before trusting it: if a file shows far more reading columns than
+' the features you actually measure, its layout is being misread.
+' ============================================================
+Sub SPC_ImportPreview()
+    Dim folder As String, pattern As String, f As String, msg As String
+    Dim names() As String, count As Long, k As Long
+
+    folder = AddSlash(CfgStr("F8"))
+    pattern = CfgStr("F9")
+    If Len(pattern) = 0 Then pattern = "*.csv"
+    If Len(folder) = 0 Or Not FolderExists(folder) Then
+        MsgBox "Set a valid watch folder in Settings F8 first.", vbExclamation, "SPC v13"
+        Exit Sub
+    End If
+
+    ReDim names(0 To 511)
+    f = Dir(folder & pattern)
+    Do While Len(f) > 0
+        If count > UBound(names) Then ReDim Preserve names(0 To UBound(names) + 512)
+        names(count) = f
+        count = count + 1
+        f = Dir
+    Loop
+
+    If count = 0 Then
+        MsgBox "No files matching " & pattern & " in:" & vbCrLf & folder, _
+               vbInformation, "SPC v13"
+        Exit Sub
+    End If
+
+    msg = "Preview of " & folder & pattern & vbCrLf & String(52, "-") & vbCrLf
+    For k = 0 To count - 1
+        msg = msg & PreviewFile(folder & names(k)) & vbCrLf
+    Next k
+    msg = msg & String(52, "-") & vbCrLf & _
+          "Columns used = readings per row. If that is larger than the" & vbCrLf & _
+          "number of features you measure, the file is being misread."
+    MsgBox msg, vbInformation, "SPC v13 - import preview"
+End Sub
+
+Private Function PreviewFile(path As String) As String
+    Dim content As String, srcLines() As String, li As Long
+    Dim line As String, parts() As String
+    Dim rows As Long, maxCols As Long, i As Long, n As Long, firstFeat As Long
+    Dim base As String
+
+    base = Mid$(path, InStrRev(path, Application.PathSeparator) + 1)
+
+    If LCase$(Mid$(path, InStrRev(path, ".") + 1)) <> "csv" And _
+       LCase$(Mid$(path, InStrRev(path, ".") + 1)) <> "txt" And _
+       LCase$(Mid$(path, InStrRev(path, ".") + 1)) <> "prn" Then
+        PreviewFile = base & ": (workbook - preview not available)"
+        Exit Function
+    End If
+
+    content = ReadAllText(path)
+    content = Replace(content, vbCrLf, vbLf)
+    content = Replace(content, vbCr, vbLf)
+    srcLines = Split(content, vbLf)
+
+    For li = LBound(srcLines) To UBound(srcLines)
+        line = Trim$(srcLines(li))
+        If Len(line) > 0 Then
+            line = Replace(line, vbTab, ",")
+            If InStr(line, ",") = 0 And InStr(line, ";") > 0 Then
+                line = Replace(line, ";", ",")
+            End If
+            parts = Split(line, ",")
+            For i = LBound(parts) To UBound(parts)
+                parts(i) = CleanField(parts(i))
+            Next i
+            n = UBound(parts) - LBound(parts) + 1
+            firstFeat = -1
+            If n > 0 Then
+                If IsNumeric(parts(LBound(parts))) Then
+                    firstFeat = LBound(parts)
+                ElseIf n >= 6 Then
+                    If IsNumeric(parts(LBound(parts) + 5)) Then firstFeat = LBound(parts) + 5
+                End If
+            End If
+            If firstFeat >= 0 Then
+                rows = rows + 1
+                If n - firstFeat > maxCols Then maxCols = n - firstFeat
+            End If
+        End If
+    Next li
+
+    PreviewFile = base & ": " & rows & " row(s), " & maxCols & " column(s) used" & _
+                  " (H" & IIf(maxCols > 1, " to " & ColLetter(FEAT_COL + maxCols - 1), "") & ")"
+End Function
+
+Private Function ColLetter(c As Long) As String
+    ColLetter = Split(ThisWorkbook.Sheets(SH_DATA).Cells(1, c).Address(True, False), "$")(0)
+End Function
 
 Sub SPC_ImportNow()
     ' One manual pass, whether or not the timer is running.
@@ -395,7 +494,7 @@ Private Function ImportFile(path As String) As Long
 End Function
 
 Private Function ImportDelimited(path As String) As Long
-    Dim ff As Integer, line As String, parts() As String
+    Dim line As String, parts() As String
     Dim ws As Worksheet, r As Long, added As Long
 
     Set ws = ThisWorkbook.Sheets(SH_DATA)
@@ -405,11 +504,18 @@ Private Function ImportDelimited(path As String) As Long
         Exit Function
     End If
 
-    ff = FreeFile
-    Open path For Input As #ff
-    Do While Not EOF(ff)
-        Line Input #ff, line
-        line = Trim$(line)
+    ' Read the file whole and split it ourselves. "Line Input #" ends a line on
+    ' CR or CRLF only - a bare-LF file (anything exported from Linux, a CMM
+    ' controller, or most non-Windows tools) comes back as ONE line, which then
+    ' splits into hundreds of fields and scatters readings across the sheet.
+    Dim content As String, srcLines() As String, li As Long
+    content = ReadAllText(path)
+    content = Replace(content, vbCrLf, vbLf)
+    content = Replace(content, vbCr, vbLf)
+    srcLines = Split(content, vbLf)
+
+    For li = LBound(srcLines) To UBound(srcLines)
+        line = Trim$(srcLines(li))
         If Len(line) > 0 Then
             ' tab-separated and semicolon-separated exports are common; treat
             ' both as comma-separated. Semicolons only when there is no comma,
@@ -422,12 +528,28 @@ Private Function ImportDelimited(path As String) As Long
             If WriteRow(ws, r, parts) Then
                 r = r + 1
                 added = added + 1
-                If r > DATA_LAST Then Exit Do
+                If r > DATA_LAST Then Exit For
             End If
         End If
-    Loop
-    Close #ff
+    Next li
     ImportDelimited = added
+End Function
+
+' Whole file as one string, BOM removed. Binary access so that line endings
+' are left exactly as they are on disk for the caller to normalise.
+Private Function ReadAllText(path As String) As String
+    Dim ff As Integer, s As String
+    ff = FreeFile
+    Open path For Binary Access Read As #ff
+    If LOF(ff) > 0 Then
+        s = Space$(LOF(ff))
+        Get #ff, 1, s
+    End If
+    Close #ff
+    If Len(s) >= 3 Then
+        If Left$(s, 3) = Chr$(239) & Chr$(187) & Chr$(191) Then s = Mid$(s, 4)
+    End If
+    ReadAllText = s
 End Function
 
 Private Function ImportWorkbook(path As String) As Long
@@ -445,13 +567,20 @@ Private Function ImportWorkbook(path As String) As Long
     On Error GoTo Fail
     Set wbSrc = Workbooks.Open(path, ReadOnly:=True, UpdateLinks:=0)
     Set wsSrc = wbSrc.Sheets(1)
-    lastSrc = wsSrc.UsedRange.Row + wsSrc.UsedRange.Rows.Count - 1
-    lastCol = wsSrc.UsedRange.Column + wsSrc.UsedRange.Columns.Count - 1
 
-    For sr = 1 To lastSrc
-        ReDim parts(0 To lastCol - 1)
-        For c = 1 To lastCol
-            parts(c - 1) = CStr(wsSrc.Cells(sr, c).Value)
+    ' Start at the first USED row and column, not at A1. A sheet whose table
+    ' begins at, say, C3 would otherwise contribute two empty leading fields
+    ' per row, shifting every reading into the wrong feature column.
+    Dim firstCol As Long, firstRow As Long
+    firstRow = wsSrc.UsedRange.Row
+    firstCol = wsSrc.UsedRange.Column
+    lastSrc = firstRow + wsSrc.UsedRange.Rows.Count - 1
+    lastCol = firstCol + wsSrc.UsedRange.Columns.Count - 1
+
+    For sr = firstRow To lastSrc
+        ReDim parts(0 To lastCol - firstCol)
+        For c = firstCol To lastCol
+            parts(c - firstCol) = CStr(wsSrc.Cells(sr, c).Value)
         Next c
         If WriteRow(ws, r, parts) Then
             r = r + 1

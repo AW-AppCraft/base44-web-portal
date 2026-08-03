@@ -55,6 +55,17 @@ def write_row(parts):
     return (meta, readings) if written else None
 
 
+def line_ending(path):
+    """'CRLF', 'LF' or 'CR'. LF-only files break Excel's Line Input."""
+    with open(path, "rb") as fh:
+        blob = fh.read()
+    if b"\r\n" in blob:
+        return "CRLF"
+    if b"\n" in blob:
+        return "LF"
+    return "CR" if b"\r" in blob else "none"
+
+
 def import_file(path):
     rows = []
     with open(path, encoding="utf-8") as fh:
@@ -74,6 +85,7 @@ def import_file(path):
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     total = 0
+    problems = []
     print(f"{'file':<26} {'rows':>5}  {'F1 (col H)':>22}  {'F2 (col I)':>22}  meta")
     print("-" * 100)
     for path in sorted(glob.glob(os.path.join(here, "*.csv"))):
@@ -84,6 +96,9 @@ def main():
             print(f"{name:<26} {0:>5}  "
                   f"{'no data rows - the importer would skip this file':<48}")
             continue
+        if line_ending(path) == "LF":
+            problems.append(f"{name}: LF-only line endings - Excel's Line Input "
+                            f"would read the whole file as one line")
         f1 = [r[1][0] for r in rows if r[1] and r[1][0] is not None]
         f2 = [r[1][1] for r in rows if len(r[1]) > 1 and r[1][1] is not None]
         has_meta = any(r[0][0] for r in rows)
@@ -95,7 +110,6 @@ def main():
     print("-" * 100)
     print(f"{'TOTAL':<26} {total:>5}")
 
-    problems = []
     expected = len(glob.glob(os.path.join(here, "batch_*.csv")))
     if expected and total != 35:
         # only meaningful in the shipped test-data folder

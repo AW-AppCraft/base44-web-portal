@@ -64,6 +64,21 @@ walks forward past any row that still holds a reading — so an append can never
 land on occupied rows. A capacity guard stops the import at row 10004 instead
 of wrapping.
 
+**LF-only files were read as a single line.** The importer used
+`Line Input #`, which ends a line on CR or CRLF and **not** on a bare LF. Any
+file with Unix line endings — including the test files, which were generated on
+Linux — came back as one enormous line, split into hundreds of fields, and had
+its readings written positionally across columns H, I, J, K … so values landed
+in N, O, T and beyond. The importer now reads the whole file and splits on any
+line ending, the test files are written CRLF, and `simulate_import.py` fails any
+LF-only file.
+
+**Excel sources whose table did not start at A1 shifted every reading.**
+`ImportWorkbook` walked columns from 1 regardless of where the used range began,
+so a sheet starting at C3 contributed two empty leading fields per row and threw
+the whole feature mapping off by two. It now starts at the first used row and
+column.
+
 **`Dir()` was called inside a `Dir()` loop.** `ArchiveFile` calls
 `FolderExists`, which calls `Dir`, resetting the folder walk mid-scan so files
 were skipped or visited twice. The scan now collects the whole file list before

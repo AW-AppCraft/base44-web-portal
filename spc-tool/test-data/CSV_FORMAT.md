@@ -66,6 +66,7 @@ You can mix both in one folder; you should not mix them inside one file.
 | **Blank readings** | A blank between commas leaves that feature empty for that row. |
 | **Non-numeric reading** | Ignored for that cell; the rest of the row still imports. |
 | **Rows with no valid reading** | Skipped entirely — they never reach Data Entry. |
+| **Line endings** | CRLF or LF are both fine from v13 onward — the importer reads the whole file and splits on any ending. Older builds used `Line Input #`, which ends a line on CR/CRLF only, so an LF-only file was read as one enormous line and its readings were scattered across the sheet. |
 | **Date format** | `YYYY-MM-DD`. The Visual SPC date filters compare text, so anything else will not filter correctly. |
 | **File types** | `*.csv`, `*.txt`, `*.prn`, `*.xlsx`, `*.xlsm`, `*.xls`. For workbooks the first sheet is read. |
 | **Duplicate imports** | Each file is recorded on the hidden `_ImportLog` by name and modified time. Re-dropping an unchanged file imports nothing; a modified file is re-imported. |
@@ -95,6 +96,11 @@ Regenerate them at any time:
 ```bash
 python3 make_test_files.py
 ```
+
+Check the layout from inside Excel before importing anything — the
+**Preview Import** button (`SPC_ImportPreview`) reports rows and columns per
+file and writes nothing. If a file shows far more columns than the features you
+measure, its layout is being misread.
 
 Check what the importer would make of them, without Excel:
 

@@ -47,9 +47,18 @@ def full_rows(start_i, n, f1=(25.000, 0.045), f2=(12.500, 0.055)):
 
 
 def write(name, lines):
+    """Always CRLF.
+
+    VBA reads these with a whole-file read and splits on any line ending, but
+    older SPC builds used "Line Input #", which ends a line on CR or CRLF and
+    NOT on a bare LF. An LF-only file was swallowed as a single line and its
+    fields scattered across the sheet. Writing CRLF keeps these files safe for
+    any Excel-side reader.
+    """
     path = HERE / name
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"{name:<26} {len(lines)} lines")
+    with open(path, "w", newline="\r\n", encoding="utf-8") as fh:
+        fh.write("\n".join(lines) + "\n")
+    print(f"{name:<26} {len(lines)} lines (CRLF)")
 
 
 # 1 - the documented layout, with a header row
