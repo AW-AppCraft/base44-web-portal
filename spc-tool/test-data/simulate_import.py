@@ -77,21 +77,28 @@ def main():
     print(f"{'file':<26} {'rows':>5}  {'F1 (col H)':>22}  {'F2 (col I)':>22}  meta")
     print("-" * 100)
     for path in sorted(glob.glob(os.path.join(here, "*.csv"))):
+        name = os.path.basename(path)
         rows = import_file(path)
         total += len(rows)
+        if not rows:
+            print(f"{name:<26} {0:>5}  "
+                  f"{'no data rows - the importer would skip this file':<48}")
+            continue
         f1 = [r[1][0] for r in rows if r[1] and r[1][0] is not None]
         f2 = [r[1][1] for r in rows if len(r[1]) > 1 and r[1][1] is not None]
         has_meta = any(r[0][0] for r in rows)
-        print(f"{os.path.basename(path):<26} {len(rows):>5}  "
-              f"{min(f1):.4f}-{max(f1):.4f} (n={len(f1):>2})  "
-              f"{min(f2):.4f}-{max(f2):.4f} (n={len(f2):>2})  "
+        span = lambda v: (f"{min(v):.4f}-{max(v):.4f} (n={len(v):>2})"  # noqa: E731
+                          if v else f"{'-':>22}")
+        print(f"{name:<26} {len(rows):>5}  {span(f1):>22}  {span(f2):>22}  "
               f"{'yes' if has_meta else 'blank (readings-only file)'}")
 
     print("-" * 100)
     print(f"{'TOTAL':<26} {total:>5}")
 
     problems = []
-    if total != 35:
+    expected = len(glob.glob(os.path.join(here, "batch_*.csv")))
+    if expected and total != 35:
+        # only meaningful in the shipped test-data folder
         problems.append(f"expected 35 data rows, parser produced {total}")
     for path in sorted(glob.glob(os.path.join(here, "*.csv"))):
         for meta, readings in import_file(path):
@@ -104,7 +111,7 @@ def main():
         for p in problems:
             print("PROBLEM:", p)
         return 1
-    print("OK - all five files parse to 35 rows, 2 readings each, headers skipped")
+    print("OK - every file parses; headers skipped, readings mapped in order")
     return 0
 
 

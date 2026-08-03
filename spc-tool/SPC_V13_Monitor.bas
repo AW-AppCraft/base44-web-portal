@@ -324,20 +324,36 @@ Private Sub ScanFolder()
     Application.ScreenUpdating = False
     Application.EnableEvents = False
 
+    ' Collect the whole file list BEFORE importing anything. Dir() keeps a
+    ' single global enumeration, and ArchiveFile / FolderExists call Dir()
+    ' themselves - doing that inside a "f = Dir" loop resets the walk, so
+    ' files get skipped or visited twice.
+    Dim names() As String, count As Long, k As Long
+    ReDim names(0 To 511)
     f = Dir(folder & pattern)
     Do While Len(f) > 0
+        If count > UBound(names) Then ReDim Preserve names(0 To UBound(names) + 512)
+        names(count) = f
+        count = count + 1
+        f = Dir
+    Loop
+
+    For k = 0 To count - 1
+        f = names(k)
         If Not AlreadyImported(f, FileDateTime(folder & f)) Then
             added = ImportFile(folder & f)
-            If added >= 0 Then
+            If added > 0 Then
                 LogImport f, FileDateTime(folder & f), added
                 nFiles = nFiles + 1
                 nRows = nRows + added
                 lastFile = f
                 If UCase$(CfgStr("F11")) = "Y" Then ArchiveFile folder, f
+            ElseIf added = 0 Then
+                ' nothing usable in it - log it so it is not retried forever
+                LogImport f, FileDateTime(folder & f), 0
             End If
         End If
-        f = Dir
-    Loop
+    Next k
 
     Mon().Range(C_LASTSCAN).Value = Format$(Now, "yyyy-mm-dd hh:nn:ss")
     Mon().Range(C_FILES).Value = nFiles
@@ -384,6 +400,10 @@ Private Function ImportDelimited(path As String) As Long
 
     Set ws = ThisWorkbook.Sheets(SH_DATA)
     r = NextFreeRow(ws)
+    If r > DATA_LAST Then
+        ImportDelimited = -1                 ' Data Entry is full
+        Exit Function
+    End If
 
     ff = FreeFile
     Open path For Input As #ff
@@ -417,6 +437,10 @@ Private Function ImportWorkbook(path As String) As Long
 
     Set ws = ThisWorkbook.Sheets(SH_DATA)
     r = NextFreeRow(ws)
+    If r > DATA_LAST Then
+        ImportWorkbook = -1                  ' Data Entry is full
+        Exit Function
+    End If
 
     On Error GoTo Fail
     Set wbSrc = Workbooks.Open(path, ReadOnly:=True, UpdateLinks:=0)
@@ -500,14 +524,50 @@ Private Function CleanField(s As String) As String
     CleanField = Trim$(t)
 End Function
 
+' ------------------------------------------------------------
+' First row after ALL existing data.
+'
+' This must never come back too low: whatever it returns is written over.
+' Two traps, both of which used to destroy previously collected data:
+'   * looking only at column H - a file that carries no feature 1 reading
+'     leaves that column empty, so the answer came back as row 5 and the
+'     import overwrote everything already there;
+'   * Range.End(xlUp) skips rows hidden by the AutoFilter on Data Entry,
+'     so with a filter applied it lands somewhere in the middle.
+' MATCH over each column ignores hidden rows and filters entirely.
+' ------------------------------------------------------------
 Private Function NextFreeRow(ws As Worksheet) As Long
+    Dim c As Long, pos As Variant, last As Long
+
+    last = DATA_FIRST - 1
+    For c = FEAT_COL To FEAT_COL + MAX_FEAT - 1
+        pos = Empty
+        On Error Resume Next
+        pos = Application.Match(1E+307, _
+                  ws.Range(ws.Cells(DATA_FIRST, c), ws.Cells(DATA_LAST, c)), 1)
+        On Error GoTo 0
+        If IsNumeric(pos) And Not IsEmpty(pos) Then
+            If CLng(pos) + DATA_FIRST - 1 > last Then last = CLng(pos) + DATA_FIRST - 1
+        End If
+    Next c
+
+    NextFreeRow = FirstEmptyRowFrom(ws, last + 1)
+End Function
+
+' Belt and braces: never hand back a row that already holds a reading.
+Private Function FirstEmptyRowFrom(ws As Worksheet, startRow As Long) As Long
     Dim r As Long
-    r = ws.Cells(DATA_LAST, FEAT_COL).End(xlUp).Row
-    If r < DATA_FIRST Then
-        NextFreeRow = DATA_FIRST
-    Else
-        NextFreeRow = r + 1
-    End If
+    r = startRow
+    If r < DATA_FIRST Then r = DATA_FIRST
+    Do While r <= DATA_LAST
+        If Application.CountA(ws.Range(ws.Cells(r, FEAT_COL), _
+                                       ws.Cells(r, FEAT_COL + MAX_FEAT - 1))) = 0 Then
+            FirstEmptyRowFrom = r
+            Exit Function
+        End If
+        r = r + 1
+    Loop
+    FirstEmptyRowFrom = DATA_LAST + 1        ' sheet full
 End Function
 
 ' ============================================================

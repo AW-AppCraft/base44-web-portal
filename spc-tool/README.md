@@ -15,6 +15,8 @@ Files:
 | `SPC_Calculator_v13.xlsx` | The generated workbook |
 | `SPC_V13_Monitor.bas` | VBA module: folder watch, auto-import, refresh, kiosk mode |
 | `validate_v13.py` | Static checks on the generated workbook (see *Validation* below) |
+| `translator/` | Converts arbitrary CSV/Excel exports into SPC format before the monitor sees them — see `translator/README.md` |
+| `test-data/` | Five sample import files + the CSV format spec |
 
 ---
 
@@ -50,6 +52,23 @@ Also new:
 ## Bugs found and fixed
 
 ### In the first v13 builds
+
+**Imported data overwrote what was already collected.** `NextFreeRow` located
+the append point with `End(xlUp)` on **column H only**. Any import that carried
+no feature 1 reading left that column empty, so the answer came back as row 5
+and the next import wrote straight over the existing data. `End(xlUp)` also
+skips rows hidden by the AutoFilter on Data Entry, which fails the same way
+whenever a filter is applied. It now takes the maximum last-used row across all
+50 feature columns using `MATCH`, which ignores hidden rows entirely, and then
+walks forward past any row that still holds a reading — so an append can never
+land on occupied rows. A capacity guard stops the import at row 10004 instead
+of wrapping.
+
+**`Dir()` was called inside a `Dir()` loop.** `ArchiveFile` calls
+`FolderExists`, which calls `Dir`, resetting the folder walk mid-scan so files
+were skipped or visited twice. The scan now collects the whole file list before
+importing anything.
+
 
 **Hidden helper columns stopped the charts drawing.** Excel plots *visible cells
 only* unless a chart says otherwise (`plotVisOnly`). v13 tidied the helper blocks
