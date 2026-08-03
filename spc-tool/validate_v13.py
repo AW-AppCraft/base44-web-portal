@@ -41,6 +41,12 @@ PSHEET_RE = re.compile(r"(?<![A-Za-z0-9_'!])([A-Za-z_][A-Za-z0-9_]*)!")
 RANGE_RE = re.compile(r"'?([^'!]+)'?!\$?([A-Z]{1,3})\$?(\d+)(?::\$?([A-Z]{1,3})\$?(\d+))?")
 # IF(A1=NA(), ...) - always #N/A regardless of A1. Use ISNA(A1).
 NA_COMPARE_RE = re.compile(r"[A-Z]{1,3}\$?\d+\s*(?:=|<>|<|>)\s*NA\(\)")
+# A formula that lost its leading "=" is stored as inert text: it displays as
+# the formula source, evaluates to nothing, and silently kills everything
+# downstream of it.
+LOOKS_LIKE_FORMULA_RE = re.compile(
+    r"^\s*(?:IF|INDEX|COUNT|COUNTIF|COUNTIFS|SUM|SUMPRODUCT|MAX|MIN|AVERAGE|"
+    r"MEDIAN|MATCH|STDEV|ABS|ROUND|IFERROR|NA|ISNA|TEXT)\s*\(")
 
 
 def balanced(formula):
@@ -65,7 +71,13 @@ def check_formulas(wb, problems):
         for row in ws.iter_rows():
             for cell in row:
                 v = cell.value
-                if not isinstance(v, str) or not v.startswith("="):
+                if not isinstance(v, str):
+                    continue
+                if not v.startswith("="):
+                    if LOOKS_LIKE_FORMULA_RE.match(v):
+                        problems.append(
+                            f"formula stored as text (missing leading '=') at "
+                            f"{ws.title}!{cell.coordinate}: {v[:90]}")
                     continue
                 counts[ws.title] += 1
                 where = f"{ws.title}!{cell.coordinate}"

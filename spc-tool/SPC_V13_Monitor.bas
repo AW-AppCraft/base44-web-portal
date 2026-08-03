@@ -45,6 +45,112 @@ Private NextKiosk As Double
 Private KioskSlot As Long
 
 ' ============================================================
+' STARTUP - Excel runs Auto_Open by itself when the workbook opens,
+' so the buttons rebuild themselves with no manual step.
+' ============================================================
+Sub Auto_Open()
+    On Error Resume Next
+    SPC_BuildButtons
+    On Error GoTo 0
+End Sub
+
+' ============================================================
+' BUTTONS
+' Drawn by macro rather than stored in the sheet, so they always point at
+' the module that is actually loaded. Safe to re-run at any time.
+' ============================================================
+Sub SPC_BuildButtons()
+    BuildPanel ThisWorkbook.Sheets("How To Use"), "E5", True
+    BuildPanel ThisWorkbook.Sheets(SH_MON), "E5", False
+End Sub
+
+Private Sub BuildPanel(ws As Worksheet, anchor As String, full As Boolean)
+    Const BW As Single = 150
+    Const BH As Single = 26
+    Const GAPY As Single = 5
+    Const GAPX As Single = 12
+
+    Dim shp As Shape, i As Long
+    ' remove any buttons from a previous run
+    For i = ws.Shapes.Count To 1 Step -1
+        If Left$(ws.Shapes(i).Name, 4) = "btn_" Then ws.Shapes(i).Delete
+    Next i
+
+    Dim x0 As Single, y0 As Single, y As Single
+    x0 = ws.Range(anchor).Left
+    y0 = ws.Range(anchor).Top
+    y = y0
+
+    y = y + Header(ws, "ACTIONS", x0, y, BW)
+    y = y + AddButton(ws, "Import Now", "SPC_ImportNow", x0, y, BW, BH, RGB(0, 130, 60)) + GAPY
+    y = y + AddButton(ws, "Start Monitoring", "SPC_StartMonitor", x0, y, BW, BH, RGB(0, 130, 60)) + GAPY
+    y = y + AddButton(ws, "Stop Monitoring", "SPC_StopMonitor", x0, y, BW, BH, RGB(170, 40, 40)) + GAPY
+    y = y + AddButton(ws, "Refresh All Charts", "SPC_RefreshAll", x0, y, BW, BH, RGB(31, 78, 121)) + GAPY
+    y = y + AddButton(ws, "Screen / Kiosk Mode", "SPC_KioskMode", x0, y, BW, BH, RGB(112, 48, 160)) + GAPY
+    y = y + AddButton(ws, "Stop Kiosk Mode", "SPC_KioskStop", x0, y, BW, BH, RGB(90, 90, 90)) + GAPY
+
+    If full Then
+        y = y + AddButton(ws, "Print Collection Form", "SPC_PrintForm", x0, y, BW, BH, RGB(31, 78, 121)) + GAPY
+        y = y + AddButton(ws, "Export PDF Report", "SPC_ExportReportPDF", x0, y, BW, BH, RGB(31, 78, 121)) + GAPY
+        y = y + AddButton(ws, "Clear All Data", "SPC_ClearData", x0, y, BW, BH, RGB(170, 40, 40)) + GAPY
+
+        Dim x1 As Single
+        x1 = x0 + BW + GAPX
+        y = y0
+        y = y + Header(ws, "GO TO SHEET", x1, y, BW)
+        y = y + AddButton(ws, "Settings", "GoToSettings", x1, y, BW, BH, RGB(68, 84, 106)) + GAPY
+        y = y + AddButton(ws, "Data Entry", "GoToDataEntry", x1, y, BW, BH, RGB(68, 84, 106)) + GAPY
+        y = y + AddButton(ws, "Control Charts", "GoToControlCharts", x1, y, BW, BH, RGB(68, 84, 106)) + GAPY
+        y = y + AddButton(ws, "Monitor", "GoToMonitor", x1, y, BW, BH, RGB(68, 84, 106)) + GAPY
+        y = y + AddButton(ws, "Visual SPC", "GoToVisualSPC", x1, y, BW, BH, RGB(68, 84, 106)) + GAPY
+        y = y + AddButton(ws, "Capability", "GoToCapability", x1, y, BW, BH, RGB(68, 84, 106)) + GAPY
+        y = y + AddButton(ws, "Collection Form", "GoToForm", x1, y, BW, BH, RGB(68, 84, 106)) + GAPY
+    End If
+End Sub
+
+Private Function Header(ws As Worksheet, caption As String, _
+                        x As Single, y As Single, w As Single) As Single
+    Dim shp As Shape
+    Set shp = ws.Shapes.AddShape(msoShapeRectangle, x, y, w, 20)
+    shp.Name = "btn_hdr_" & Replace(caption, " ", "_") & "_" & Int(x)
+    shp.Fill.ForeColor.RGB = RGB(31, 56, 100)
+    shp.Line.Visible = msoFalse
+    With shp.TextFrame2
+        .TextRange.Text = caption
+        .TextRange.Font.Size = 9
+        .TextRange.Font.Bold = msoTrue
+        .TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
+        .VerticalAnchor = msoAnchorMiddle
+        .TextRange.ParagraphFormat.Alignment = msoAlignCenter
+    End With
+    Header = 20 + 6
+End Function
+
+Private Function AddButton(ws As Worksheet, caption As String, macro As String, _
+                           x As Single, y As Single, w As Single, h As Single, _
+                           colour As Long) As Single
+    Dim shp As Shape
+    Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, x, y, w, h)
+    shp.Name = "btn_" & macro
+    shp.Fill.ForeColor.RGB = colour
+    shp.Line.ForeColor.RGB = RGB(255, 255, 255)
+    shp.Line.Weight = 1
+    With shp.TextFrame2
+        .TextRange.Text = caption
+        .TextRange.Font.Size = 10
+        .TextRange.Font.Bold = msoTrue
+        .TextRange.Font.Name = "Arial"
+        .TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
+        .VerticalAnchor = msoAnchorMiddle
+        .TextRange.ParagraphFormat.Alignment = msoAlignCenter
+        .MarginLeft = 2
+        .MarginRight = 2
+    End With
+    shp.OnAction = macro
+    AddButton = h
+End Function
+
+' ============================================================
 ' PUBLIC ENTRY POINTS
 ' ============================================================
 Sub SPC_StartMonitor()
@@ -418,13 +524,37 @@ End Sub
 ' ============================================================
 ' NAVIGATION
 ' ============================================================
-Sub GoToSettings():     ThisWorkbook.Sheets(SH_SET).Activate:                  End Sub
-Sub GoToDataEntry():    ThisWorkbook.Sheets(SH_DATA).Activate:                 End Sub
-Sub GoToControlCharts(): ThisWorkbook.Sheets("Control Charts").Activate:       End Sub
-Sub GoToMonitor():      ThisWorkbook.Sheets(SH_MON).Activate:                  End Sub
-Sub GoToVisualSPC():    ThisWorkbook.Sheets("Visual SPC").Activate:            End Sub
-Sub GoToCapability():   ThisWorkbook.Sheets("Capability").Activate:            End Sub
-Sub GoToForm():         ThisWorkbook.Sheets("Data Collection Form").Activate:  End Sub
+Sub GoToHowToUse()
+    ThisWorkbook.Sheets("How To Use").Activate
+End Sub
+
+Sub GoToSettings()
+    ThisWorkbook.Sheets(SH_SET).Activate
+End Sub
+
+Sub GoToDataEntry()
+    ThisWorkbook.Sheets(SH_DATA).Activate
+End Sub
+
+Sub GoToControlCharts()
+    ThisWorkbook.Sheets("Control Charts").Activate
+End Sub
+
+Sub GoToMonitor()
+    ThisWorkbook.Sheets(SH_MON).Activate
+End Sub
+
+Sub GoToVisualSPC()
+    ThisWorkbook.Sheets("Visual SPC").Activate
+End Sub
+
+Sub GoToCapability()
+    ThisWorkbook.Sheets("Capability").Activate
+End Sub
+
+Sub GoToForm()
+    ThisWorkbook.Sheets("Data Collection Form").Activate
+End Sub
 
 ' ============================================================
 ' UTILITY

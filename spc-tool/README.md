@@ -36,6 +36,22 @@ Also new:
 * **Rolling chart window.** v12.1 always plotted rows 5–204, so charts froze once
   you passed 200 samples. Charts now follow the **most recent** `Settings!F5`
   points (default 200) and keep scrolling as data arrives.
+### Bug found in the first v13 build and fixed
+
+Five of the fourteen statistics rows on Data Entry — **Mean, Min, Max, Range and
+Median** — were written **without their leading `=`**, so Excel stored them as
+inert text (250 cells). Capability reads Mean/Min/Max from those cells, and the
+chart helpers read Capability, so the control limits, the spec lines and the
+histogram bin bounds all resolved to nothing: **every chart came up empty no
+matter how much data you entered.** The cause was a shared `guard` string in the
+build script that started at `IF(` instead of `=IF(`.
+
+`validate_v13.py` now fails on any cell holding a string that starts with a
+function call but has no `=`, so this class of bug cannot ship again.
+
+This was a formula bug, not a macro problem — the charts have never needed a
+macro to populate.
+
 ### Bugs found in v12.1 and fixed
 
 **The Visual SPC histogram never drew any bars.** Every cell of its `BinCnt`
@@ -85,6 +101,7 @@ uses `C4` as date-from and `E4` as date-to, with shift/operator/tool at `G4`,
 
 | Sheet | Purpose |
 |---|---|
+| How To Use | Step-by-step instructions, chart colour key, troubleshooting — and where the macro buttons are drawn |
 | Settings | Feature definitions (name, nominal, LSL, USL, unit, active) + display and monitor options |
 | Data Entry | Measurements. Column H = feature 1, I = feature 2 … BE = feature 50. Row 10009+ holds the per-feature statistics block |
 | Data Collection Form | Print-ready manual recording sheet |
@@ -94,7 +111,28 @@ uses `C4` as date-from and `E4` as date-to, with shift/operator/tool at `G4`,
 | Capability | Cp / Cpk / Pp / Ppk with traffic lights |
 | Dashboard | Single-feature summary |
 | `_Calc` | Hidden filter engine for Visual SPC — do not edit |
-| Document Control / Revision History / File Locations / Help | Document control |
+| Document Control / Revision History / File Locations | Document control |
+
+### What needs macros, and what does not
+
+**Charts, statistics, capability and filters are all formulas — no macro, no
+button, nothing to run.** Enter data and they update. Only these need the VBA
+module: folder monitoring, kiosk mode, PDF export, one-click clear/print.
+
+### Buttons
+
+Buttons are drawn by the macro module rather than stored in the sheet, so they
+always point at the code that is actually loaded. Once `SPC_V13_Monitor.bas` is
+imported and the workbook saved as `.xlsm`, Excel's `Auto_Open` rebuilds them
+every time the file opens — nothing to run by hand. If they are ever missing,
+run `SPC_BuildButtons` once.
+
+They appear on **How To Use** (actions + go-to-sheet navigation) and on
+**Monitor** (the six live-monitoring actions):
+
+Import Now · Start Monitoring · Stop Monitoring · Refresh All Charts ·
+Screen/Kiosk Mode · Stop Kiosk · Print Collection Form · Export PDF Report ·
+Clear All Data
 
 ### Yellow cells
 

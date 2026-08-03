@@ -318,7 +318,9 @@ def build_data_entry(wb, demo_rows):
         rng = f"'Data Entry'!${L}${DATA_FIRST}:${L}${DATA_LAST}"
         prev = f"'Data Entry'!${L}${DATA_FIRST}:${L}${DATA_LAST - 1}"
         nxt = f"'Data Entry'!${L}${DATA_FIRST + 1}:${L}${DATA_LAST}"
-        guard = f'IF(COUNT({rng})=0,""'
+        # NB: the leading "=" belongs here - every formula built from `guard`
+        # is a complete cell formula, not a fragment.
+        guard = f'=IF(COUNT({rng})=0,""'
         formulas = {
             "count": f"=COUNT({rng})",
             "mean": f"{guard},AVERAGE({rng}))",
@@ -1303,62 +1305,6 @@ def build_doc_sheets(wb):
             label(ws2, 5 + i, 1 + j, v, F_BODY, None, BOX,
                   Alignment(wrap_text=True, vertical="top"))
 
-    ws3 = wb.create_sheet("Help")
-    title_block(ws3, f"HELP - SPC CALCULATOR {VERSION}", "", 3)
-    ws3.column_dimensions["A"].width = 110
-    lines = [
-        "",
-        "SHEET MAP",
-        "  Settings ............ features (name, nominal, LSL, USL, unit, active) + display/monitor options",
-        "  Data Entry .......... measurements; column H = feature 1, I = feature 2, ...",
-        "  Data Collection Form  printable sheet for recording readings away from a PC",
-        "  Control Charts ...... per feature: statistics panel (left) + X, mR and histogram charts",
-        "  Monitor ............. 4 selectable slots + all-feature status table + folder-watch config",
-        "  Visual SPC .......... filtered analysis: date range / shift / operator / tool",
-        "  Capability .......... Cp, Cpk, Pp, Ppk, in-control and in-spec verdicts",
-        "  Dashboard ........... one-feature summary",
-        "",
-        "READING THE CHARTS",
-        "  Blue line + markers = individual measurements",
-        "  Green dashed ....... CL (process mean)",
-        "  Red ................ UCL / LCL (3-sigma control limits from mR-bar)",
-        "  Purple dashed ...... USL / LSL (customer specification limits)",
-        "  Histogram .......... distribution of ALL data for that feature;",
-        "                       purple spikes mark the bins containing LSL and USL",
-        "",
-        "CHART WINDOW",
-        "  Settings F5 sets how many of the most recent points are plotted (default 200).",
-        "  Charts always follow the newest data, so a live process keeps scrolling.",
-        "",
-        "SPEC LIMITS",
-        "  Enter LSL and USL on Settings (columns D and E). Leave blank and the spec",
-        "  lines simply disappear; Cp/Cpk stay empty rather than showing nonsense.",
-        "  Settings F7 = N hides the spec lines without deleting the limits.",
-        "",
-        "FILTERS (Visual SPC)",
-        "  B3   feature number",
-        "  C4   date from (YYYY-MM-DD)      E4  date to",
-        "  G4   shift        I4  operator   K4  tool ID",
-        "  Blank = include everything. Statistics, control limits and the histogram",
-        "  are all recomputed from the filtered subset.",
-        "",
-        "FOLDER MONITORING (needs macros - import SPC_V13_Monitor.bas)",
-        "  1. Settings F8  = folder to watch      F9 = file pattern (*.csv)",
-        "  2. Settings F10 = refresh seconds      F11 = archive imported files Y/N",
-        "  3. Alt+F8 -> SPC_StartMonitor.  New files are appended to Data Entry,",
-        "     every chart refreshes, and the Monitor sheet logs what happened.",
-        "  4. SPC_StopMonitor ends it. SPC_KioskMode gives a full-screen rolling display.",
-        "  Save the workbook as .xlsm first, otherwise the macros cannot be stored.",
-        "",
-        "TROUBLESHOOTING",
-        "  Charts blank?  Ctrl+Alt+F9 forces a full recalculation.",
-        "  #N/A in helper cells is correct - charts ignore it, which is how the",
-        "  series shrink and grow with the data.",
-    ]
-    for i, line in enumerate(lines):
-        cell = ws3.cell(row=3 + i, column=1, value=line)
-        cell.font = F_SECTION if line.isupper() and line else F_BODY
-
     ws4 = wb.create_sheet("File Locations")
     title_block(ws4, "FILE LOCATIONS", "", 3)
     ws4.column_dimensions["A"].width = 24
@@ -1367,12 +1313,162 @@ def build_doc_sheets(wb):
     label(ws4, 4, 2, "Path", F_HEAD, HEAD_FILL, BOX)
     items = [("Build script", "spc-tool/build_spc_v13.py"),
              ("VBA module", "spc-tool/SPC_V13_Monitor.bas"),
+             ("VBA module (txt)", "spc-tool/SPC_V13_Monitor_CODE.txt"),
+             ("Validator", "spc-tool/validate_v13.py"),
              ("Read me", "spc-tool/README.md"),
              ("Watch folder", "=Settings!F8"),
              ("Archive folder", "=Settings!F12")]
     for i, (k, v) in enumerate(items):
         label(ws4, 5 + i, 1, k, F_LABEL, None, BOX)
         label(ws4, 5 + i, 2, v, F_BODY, None, BOX)
+
+
+def build_how_to_use(wb):
+    """First sheet: step-by-step instructions + the area the macro buttons use."""
+    ws = wb.create_sheet("How To Use")
+    title_block(ws, f"HOW TO USE - SPC CALCULATOR {VERSION}",
+                "Read this once. The charts need no macros; only folder "
+                "monitoring does.", 6)
+    ws.column_dimensions["A"].width = 5
+    ws.column_dimensions["B"].width = 30
+    ws.column_dimensions["C"].width = 78
+    ws.column_dimensions["D"].width = 3
+    for c in "EFG":
+        ws.column_dimensions[c].width = 22
+
+    r = [4]
+
+    def section(text):
+        label(ws, r[0], 1, text, F_HEAD, HEAD_FILL, BOX)
+        ws.merge_cells(start_row=r[0], start_column=1, end_row=r[0], end_column=3)
+        for c in (2, 3):
+            ws.cell(row=r[0], column=c).fill = HEAD_FILL
+            ws.cell(row=r[0], column=c).border = BOX
+        r[0] += 1
+
+    def step(num, head, body):
+        if num is not None:
+            c = ws.cell(row=r[0], column=1, value=num)
+            c.font = Font(name=FONT, size=11, bold=True, color=BLUE)
+            c.alignment = Alignment(horizontal="center", vertical="top")
+        label(ws, r[0], 2, head, F_LABEL, None, None,
+              Alignment(vertical="top", wrap_text=True))
+        label(ws, r[0], 3, body, F_BODY, None, None,
+              Alignment(vertical="top", wrap_text=True))
+        r[0] += 1
+
+    def gap():
+        r[0] += 1
+
+    section("QUICK START - NO MACROS NEEDED")
+    step(1, "Set up your features",
+         "Settings sheet. For each feature type the name, Nominal, LSL, USL and "
+         "unit, and set Active = Y. Yellow cells are the ones you edit.")
+    step(2, "Enter measurements",
+         "Data Entry sheet. Column H is feature 1, I is feature 2, and so on. "
+         "Date / Shift / Operator / Tool ID in columns C-F are optional but they "
+         "are what the Visual SPC filters use.")
+    step(3, "Look at the charts",
+         "Control Charts updates by itself - there is nothing to run. Each "
+         "feature shows a statistics panel on the left, then the X chart, the "
+         "moving-range chart and a histogram.")
+    step(4, "Check capability",
+         "Capability sheet gives Cp, Cpk, Pp, Ppk with traffic lights, plus an "
+         "in-control and an in-spec verdict per feature.")
+    step(5, "Filter and explore",
+         "Visual SPC. Pick a feature in B3, then filter by date range, shift, "
+         "operator or tool. Every statistic and all three plots recompute from "
+         "the filtered rows only. Blank filter = include everything.")
+    step(6, "Recording readings by hand",
+         "Data Collection Form is already set up to print: A4 landscape, one "
+         "page, spec limits pulled from Settings. Ctrl+P.")
+    gap()
+
+    section("IF THE CHARTS LOOK EMPTY")
+    step(None, "Press Ctrl+Alt+F9",
+         "That forces a full recalculation. The workbook is built to recalculate "
+         "when it opens, but this settles it if a chart looks stale.")
+    step(None, "Check Active = Y",
+         "A feature with Active = N on Settings has no name in Data Entry row 4 "
+         "and is excluded from Capability.")
+    step(None, "Check the readings are numbers",
+         "Values pasted as text are ignored by every statistic. Excel shows them "
+         "left-aligned with a green corner marker.")
+    step(None, "#N/A in the hidden columns is correct",
+         "That is how the charts shrink and grow with the data - Excel skips "
+         "#N/A points. Do not 'fix' those cells.")
+    gap()
+
+    section("CHART COLOUR KEY")
+    step(None, "Blue line + markers", "Individual measurements")
+    step(None, "Green dashed", "CL - the process mean")
+    step(None, "Red", "UCL / LCL - 3-sigma control limits calculated from mR-bar")
+    step(None, "Purple long-dash", "USL / LSL - your specification limits")
+    step(None, "Histogram bars",
+         "Distribution of all readings for that feature. The purple spikes mark "
+         "the bins holding LSL and USL, so you can see the distribution against "
+         "the tolerance rather than against itself.")
+    gap()
+
+    section("WHAT EACH SHEET IS FOR")
+    for name, purpose in [
+        ("Settings", "Feature definitions and display / monitor options"),
+        ("Data Entry", "All measurements. Column H onward"),
+        ("Data Collection Form", "Printable sheet for recording readings off-PC"),
+        ("Control Charts", "Per feature: stats panel, X chart, mR chart, histogram"),
+        ("Monitor", "Live screen: 4 selectable slots + all-feature status table"),
+        ("Visual SPC", "Filtered analysis and plots"),
+        ("Capability", "Cp / Cpk / Pp / Ppk and verdicts"),
+        ("Dashboard", "One-feature summary"),
+        ("Document Control", "Doc ID, revision, owner"),
+    ]:
+        step(None, name, purpose)
+    gap()
+
+    section("DISPLAY OPTIONS (Settings, column F)")
+    for cell, meaning in [
+        ("F5  Chart Window", "How many of the most recent points the charts plot "
+                             "(default 200). Charts always follow the newest data."),
+        ("F6  Histogram Bins", "Number of histogram bars (default 15)."),
+        ("F7  Show Spec Limits", "Y shows the USL/LSL lines, N hides them without "
+                                 "deleting the limits."),
+    ]:
+        step(None, cell, meaning)
+    gap()
+
+    section("FOLDER MONITORING - THE ONLY PART THAT NEEDS MACROS")
+    step(1, "Save as .xlsm",
+         "File > Save As > Excel Macro-Enabled Workbook. Macros cannot be stored "
+         "in a .xlsx.")
+    step(2, "Import the module",
+         "Alt+F11 > File > Import File > SPC_V13_Monitor.bas. (If you were sent "
+         "the .txt version, rename it to .bas first, or paste its contents into "
+         "a new module and drop the first Attribute line.)")
+    step(3, "Buttons appear",
+         "Save, close and reopen the workbook. The buttons on the right of this "
+         "sheet and on the Monitor sheet are created automatically. If they are "
+         "missing, run SPC_BuildButtons once from Alt+F8.")
+    step(4, "Point it at a folder",
+         "Settings F8 = folder to watch, F9 = pattern such as *.csv, "
+         "F10 = seconds between scans, F11 = Y to move imported files into the "
+         "archive subfolder named in F12.")
+    step(5, "Press Start Monitoring",
+         "New files are appended to Data Entry, all charts refresh, and the "
+         "Monitor sheet logs status, last scan, and files / rows imported. Each "
+         "file is imported once - a hidden log prevents double counting.")
+    step(None, "Accepted file layouts",
+         "Date, Shift, Operator, ToolID, Cluster, F1, F2, ... Fn   -or-   "
+         "F1, F2, ... Fn on its own. A header row is skipped automatically.")
+    gap()
+
+    section("BUTTONS")
+    step(None, "Right of this sheet",
+         "Actions and navigation. They are drawn by the macro module, so they "
+         "only appear once macros are enabled. Everything in the Quick Start "
+         "above works without them.")
+
+    ws.sheet_view.showGridLines = False
+    return ws
 
 
 # ==========================================================================
@@ -1408,6 +1504,7 @@ def main(out="SPC_Calculator_v13.xlsx"):
     wb = Workbook()
     wb.remove(wb.active)
 
+    build_how_to_use(wb)
     build_settings(wb, demo_specs)
     build_data_entry(wb, demo_rows)
     build_form(wb)
@@ -1419,7 +1516,7 @@ def main(out="SPC_Calculator_v13.xlsx"):
     build_calc(wb)
     build_doc_sheets(wb)
 
-    wb.active = wb.sheetnames.index("Control Charts")
+    wb.active = wb.sheetnames.index("How To Use")
     wb.save(out)
     print(f"written: {out}")
 
