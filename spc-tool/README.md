@@ -36,6 +36,41 @@ Also new:
 * **Rolling chart window.** v12.1 always plotted rows 5–204, so charts froze once
   you passed 200 samples. Charts now follow the **most recent** `Settings!F5`
   points (default 200) and keep scrolling as data arrives.
+### Bugs found in v12.1 and fixed
+
+**The Visual SPC histogram never drew any bars.** Every cell of its `BinCnt`
+column (`AB7:AB26`) read:
+
+```
+=IF(AA7=NA(), NA(), COUNTIFS(...))
+```
+
+`AA7=NA()` compares a cell against the `#N/A` *error*, and any comparison
+involving `#N/A` evaluates to `#N/A` — whether `AA7` holds a number or an
+error. So the guard was always true-ish in the worst way: all 20 bin counts
+returned `#N/A` under every condition, and the chart had nothing to plot. The
+correct test is `ISNA(AA7)`. v13 does not compare against `NA()` anywhere, and
+`validate_v13.py` now fails the build if that pattern ever reappears.
+
+**The histogram bins were built from the spec limits alone.** Bin lows ran
+`LSL + k*(USL-LSL)/20`, so:
+
+* with no spec limits set, a blank cell read as `0` and all 20 bins collapsed to
+  zero width at zero;
+* with limits set, any reading outside tolerance fell outside the bin range
+  entirely — the out-of-spec tail, the part you most want to see, was invisible.
+
+v13 bins the actual data min/max, widens that to cover LSL and USL, then pads 5%,
+so the distribution *and* both limits are always in frame.
+
+**Its histogram only ever covered the first 200 data rows** (`$U$7:$U$206`),
+so anything past row 204 of Data Entry was missing from the distribution. v13
+counts the whole filtered set (`_Calc!$D$5:$D$10004`).
+
+Note the filter cells moved: v12.1 used `C4` as a single exact date match. v13
+uses `C4` as date-from and `E4` as date-to, with shift/operator/tool at `G4`,
+`I4` and `K4`.
+
 * **Capability** gained median, min, max, range, overall sigma, tolerance width,
   an In-Spec check and a plain-English verdict, and it no longer computes
   Cp/Cpk from a blank spec limit read as zero — a real bug in v12.1, where an

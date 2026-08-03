@@ -12,7 +12,12 @@ checks the things that break silently in a generated workbook:
   4. every chart series and category range points at a column that actually
      holds formulas, and at the row range the helper block occupies;
   5. the reference chain that feeds the charts lands on the intended
-     Capability columns (USL really is the USL column, and so on).
+     Capability columns (USL really is the USL column, and so on);
+  6. no formula compares a cell against NA(). `IF(A1=NA(), ...)` looks
+     reasonable and is always wrong: comparing anything with the #N/A error
+     yields #N/A, so the whole formula returns #N/A whatever A1 holds. This
+     silently emptied the entire BinCnt column of the v12.1 Visual SPC
+     histogram, so its bars never drew. The correct test is ISNA(A1).
 
 Run:  python3 validate_v13.py SPC_Calculator_v13.xlsx
 """
@@ -34,6 +39,8 @@ FUNC_RE = re.compile(r"\b([A-Z][A-Z0-9_.]*)\s*\(")
 QSHEET_RE = re.compile(r"'([^']+)'!")
 PSHEET_RE = re.compile(r"(?<![A-Za-z0-9_'!])([A-Za-z_][A-Za-z0-9_]*)!")
 RANGE_RE = re.compile(r"'?([^'!]+)'?!\$?([A-Z]{1,3})\$?(\d+)(?::\$?([A-Z]{1,3})\$?(\d+))?")
+# IF(A1=NA(), ...) - always #N/A regardless of A1. Use ISNA(A1).
+NA_COMPARE_RE = re.compile(r"[A-Z]{1,3}\$?\d+\s*(?:=|<>|<|>)\s*NA\(\)")
 
 
 def balanced(formula):
@@ -64,6 +71,10 @@ def check_formulas(wb, problems):
                 where = f"{ws.title}!{cell.coordinate}"
                 if not balanced(v):
                     problems.append(f"unbalanced formula at {where}: {v[:90]}")
+                if NA_COMPARE_RE.search(v):
+                    problems.append(
+                        f"compares a cell against NA() at {where} "
+                        f"(always #N/A - use ISNA()): {v[:90]}")
                 for name in QSHEET_RE.findall(v) + PSHEET_RE.findall(v):
                     if name in ALLOWED_FUNCS:
                         continue
