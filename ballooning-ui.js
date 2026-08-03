@@ -40,7 +40,9 @@
      'tolAngular', 'zoneRows', 'zoneCols', 'includeNotes', 'partNumber', 'partName',
      'drawingNumber', 'revision', 'fairNumber', 'serialNumber', 'supplier', 'sampleSize',
      'exportForm3', 'exportPpap', 'exportJson', 'exportPng', 'saveLocal', 'loadLocal',
-     'detail', 'emptyState'].forEach(function (k) { el[k] = $(k); });
+     'detail', 'emptyState', 'ollamaEndpoint', 'ollamaConnect', 'ollamaHelp', 'ollamaModel',
+     'visionRows', 'visionCols', 'visionScale', 'visionOverlap', 'runVision', 'cancelVision',
+     'visionProgress', 'visionBar', 'visionMsg'].forEach(function (k) { el[k] = $(k); });
 
     el.fileInput.addEventListener('change', onFile);
     el.prevPage.addEventListener('click', function () { gotoPage(state.pageIndex - 1); });
@@ -66,6 +68,13 @@
     el.exportPng.addEventListener('click', exportBalloonedPng);
     el.saveLocal.addEventListener('click', saveLocal);
     el.loadLocal.addEventListener('click', loadLocal);
+
+    el.ollamaConnect.addEventListener('click', connectOllama);
+    el.ollamaHelp.addEventListener('click', showCorsHelp);
+    el.runVision.addEventListener('click', runVision);
+    el.cancelVision.addEventListener('click', function () {
+      if (state.visionAbort) state.visionAbort.abort();
+    });
 
     window.addEventListener('resize', positionOverlay);
     setStatus('Load a drawing PDF to begin.');
@@ -119,7 +128,11 @@
 
   function runExtraction(keepManual) {
     if (!state.pages.length) { setStatus('Load a PDF first.', true); return; }
-    var manual = keepManual ? state.chars.filter(function (c) { return c.source === 'manual'; }) : [];
+    // Re-running the text parser must not discard work the parser cannot
+    // reproduce: hand-placed balloons and vision-model results.
+    var manual = keepManual ? state.chars.filter(function (c) {
+      return c.source === 'manual' || c.source === 'vision';
+    }) : [];
     var textCount = state.pages.reduce(function (n, p) { return n + p.items.length; }, 0);
 
     if (textCount === 0) {
@@ -198,6 +211,7 @@
 
       var b = document.createElement('div');
       b.className = 'balloon b-' + typeClass(c.type) +
+        (c.source === 'vision' ? ' vision' : '') +
         (c.id === state.selectedId ? ' sel' : '') + (c.review ? ' review' : '');
       b.style.left = bx + 'px';
       b.style.top = by + 'px';
@@ -418,6 +432,119 @@
     if (s.review) parts.push('<span class="chip warn">Needs review: ' + s.review + '</span>');
     if (s.critical) parts.push('<span class="chip crit">Key: ' + s.critical + '</span>');
     el.summary.innerHTML = parts.join(' ');
+  }
+
+  // -------------------------------------------------------------------------
+  // Vision pass (local Ollama)
+  // -------------------------------------------------------------------------
+
+  function connectOllama() {
+    var V = window.BallooningVision;
+    var client = new V.OllamaClient(el.ollamaEndpoint.value);
+    setStatus('Connecting to Ollama …');
+
+    client.listModels().then(function (models) {
+      el.ollamaModel.innerHTML = '';
+      if (!models.length) {
+        el.ollamaModel.innerHTML = '<option value="">no models installed</option>';
+        setStatus('Connected, but Ollama has no models installed. Pull a vision model first, ' +
+          'e.g. "ollama pull gemma3:12b".', true);
+        return;
+      }
+      // Vision-capable families float to the top; a text-only model returns
+      // nothing useful here and the mistake is easy to make in a long list.
+      var visionish = /gemma3|llava|llama3\.2-vision|minicpm-v|qwen2?\.?5?-?vl|moondream|bakllava|pixtral|granite3\.2-vision|mistral-small3/i;
+      models.sort(function (a, b) {
+        return (visionish.test(b) ? 1 : 0) - (visionish.test(a) ? 1 : 0) || a.localeCompare(b);
+      });
+      models.forEach(function (m) {
+        var o = document.createElement('option');
+        o.value = m;
+        o.textContent = m + (visionish.test(m) ? '  (vision)' : '  (text only?)');
+        el.ollamaModel.appendChild(o);
+      });
+      var vcount = models.filter(function (m) { return visionish.test(m); }).length;
+      setStatus('Connected to Ollama — ' + models.length + ' model' + (models.length === 1 ? '' : 's') +
+        ' available' + (vcount ? ', ' + vcount + ' vision-capable.' : '. None look vision-capable; ' +
+        'a text-only model cannot read a drawing.'));
+    }).catch(function (err) {
+      setStatus(err.message, true);
+    });
+  }
+
+  function showCorsHelp() {
+    var origin = window.location.origin === 'null' ? 'the page origin' : window.location.origin;
+    alert(
+      'Ollama refuses cross-origin browser requests by default, so this page needs to be ' +
+      'allowed explicitly.\n\n' +
+      'This page\'s origin is:\n  ' + origin + '\n\n' +
+      'Restart Ollama with that origin allowed:\n\n' +
+      'Windows (PowerShell):\n' +
+      '  setx OLLAMA_ORIGINS "' + origin + '"\n' +
+      '  (then quit Ollama from the tray and start it again)\n\n' +
+      'macOS / Linux:\n' +
+      '  OLLAMA_ORIGINS="' + origin + '" ollama serve\n\n' +
+      'Opening this file directly from disk (file://) gives a null origin, which cannot be ' +
+      'allowed — serve the folder over http instead, e.g.:\n' +
+      '  npx http-server -p 8080\n\n' +
+      'OLLAMA_ORIGINS="*" also works, but allows any site you visit to reach your Ollama.'
+    );
+  }
+
+  function runVision() {
+    var V = window.BallooningVision;
+    if (!state.pages.length) { setStatus('Load a PDF first.', true); return; }
+    if (!el.ollamaModel.value) { setStatus('Connect to Ollama and pick a vision model first.', true); return; }
+
+    state.visionAbort = new AbortController();
+    el.runVision.disabled = true;
+    el.cancelVision.style.display = '';
+    el.visionProgress.style.display = '';
+    setProgress(0, 1, 'Starting …');
+
+    V.runVisionPass(state.loader, state.pageIndex, state.chars, {
+      endpoint: el.ollamaEndpoint.value,
+      model: el.ollamaModel.value,
+      rows: parseInt(el.visionRows.value, 10) || 2,
+      cols: parseInt(el.visionCols.value, 10) || 2,
+      scale: parseFloat(el.visionScale.value) || 2.5,
+      overlap: parseFloat(el.visionOverlap.value),
+      unit: state.opts.unit,
+      generalTol: state.opts.generalTol,
+      zoneRows: state.opts.zoneRows,
+      zoneCols: state.opts.zoneCols,
+      signal: state.visionAbort.signal,
+      onProgress: setProgress
+    }).then(function (result) {
+      state.chars = state.chars.concat(result.characteristics);
+      B.assignNumbers(state.chars);
+      renderAll();
+
+      var msg = 'Vision pass added ' + result.characteristics.length + ' characteristic' +
+        (result.characteristics.length === 1 ? '' : 's') + ' from ' + result.tiles + ' regions. ' +
+        'Every one is flagged for review — check the text and drag the balloons into place.';
+      if (result.suppressed) {
+        msg += ' ' + result.suppressed + ' suppressed as duplicates of results already on the ' +
+          'sheet — if the print genuinely repeats a callout, add it with "Add balloon".';
+      }
+      if (result.errors.length) {
+        msg += ' ' + result.errors.length + ' region(s) failed: ' + result.errors[0];
+      }
+      setStatus(msg, result.errors.length > 0);
+    }).catch(function (err) {
+      setStatus(err.name === 'AbortError' ? 'Vision pass cancelled.' : 'Vision pass failed: ' + err.message,
+        err.name !== 'AbortError');
+    }).then(function () {
+      el.runVision.disabled = false;
+      el.cancelVision.style.display = 'none';
+      el.visionProgress.style.display = 'none';
+      state.visionAbort = null;
+    });
+  }
+
+  function setProgress(done, total, msg) {
+    el.visionBar.style.width = Math.round((done / Math.max(total, 1)) * 100) + '%';
+    el.visionMsg.textContent = msg || '';
   }
 
   // -------------------------------------------------------------------------

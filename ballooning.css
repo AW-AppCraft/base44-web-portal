@@ -176,6 +176,28 @@ html.no-iconfont .bl-toolbar i.fas { display: none; }
 .b-thr  { border-color: #ec4899; }
 .b-note { border-color: #6b7280; }
 
+/* Vision-sourced balloons get a filled marker so a transcribed characteristic is
+   never mistaken at a glance for one read from the text layer. */
+.balloon.vision { background: #ede9fe; border-color: #7c3aed; }
+.hl-vision { background: rgba(124, 58, 237, .12); border-color: rgba(124, 58, 237, .5); }
+
+.bl-progress { margin-top: 10px; font-size: 12px; color: var(--bl-muted); }
+.bl-progress .bar {
+  display: block;
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.bl-progress .bar span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--bl-accent);
+  transition: width .2s;
+}
+
 /* ------------------------------------------------------------ summary */
 
 .bl-summary { font-size: 13px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

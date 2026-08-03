@@ -67,6 +67,33 @@
             </section>
 
             <section class="bl-panel">
+                <h3><i class="fas fa-eye"></i> Vision pass (local Ollama)</h3>
+                <p class="hint">For scanned drawings, outlined text, or legacy symbol fonts.
+                   Runs against Ollama on this machine — the drawing is never uploaded anywhere.</p>
+                <label>Endpoint <input type="text" id="ollamaEndpoint" value="http://localhost:11434"></label>
+                <div class="split">
+                    <button class="btn btn-ghost" id="ollamaConnect"><i class="fas fa-plug"></i> Connect</button>
+                    <button class="btn btn-ghost" id="ollamaHelp"><i class="fas fa-circle-question"></i> CORS help</button>
+                </div>
+                <label>Model
+                    <select id="ollamaModel"><option value="">— connect first —</option></select>
+                </label>
+                <p class="sub">Split the sheet into regions so callouts stay legible:</p>
+                <div class="grid2">
+                    <label>Rows <input type="number" id="visionRows" value="2" min="1" max="6"></label>
+                    <label>Cols <input type="number" id="visionCols" value="2" min="1" max="6"></label>
+                    <label>Render scale <input type="number" id="visionScale" value="2.5" step="0.5" min="1" max="6"></label>
+                    <label>Overlap <input type="number" id="visionOverlap" value="0.12" step="0.02" min="0" max="0.4"></label>
+                </div>
+                <button class="btn btn-primary block" id="runVision"><i class="fas fa-wand-magic-sparkles"></i> Run vision pass on this sheet</button>
+                <button class="btn btn-ghost block" id="cancelVision" style="display:none"><i class="fas fa-stop"></i> Cancel</button>
+                <div class="bl-progress" id="visionProgress" style="display:none">
+                    <div class="bar"><span id="visionBar"></span></div>
+                    <span id="visionMsg"></span>
+                </div>
+            </section>
+
+            <section class="bl-panel">
                 <h3><i class="fas fa-id-card"></i> FAIR header</h3>
                 <label>Part number <input type="text" id="partNumber"></label>
                 <label>Part name <input type="text" id="partName"></label>
@@ -191,6 +218,7 @@
         })();
     </script>
     <script src="ballooning.js"></script>
+    <script src="vision.js"></script>
     <script src="ballooning-ui.js"></script>
 </body>
 </html>

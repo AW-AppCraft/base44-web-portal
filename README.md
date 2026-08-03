@@ -112,20 +112,76 @@ These are properties of the problem, not gaps to be patched later:
   ASCII letters, so a position callout extracts as `j 0.25 m A B C`. The tool
   remaps them best-effort via `SYMBOL_FONT_MAP` in `ballooning.js` and always
   flags the result — calibrate the map against a known drawing before trusting it.
-- **Scanned drawings yield nothing.** No text layer, no extraction. Balloon
-  manually, or pre-process the file with OCR or a vision model first.
+- **Scanned drawings yield nothing from the text layer.** No text layer, no
+  parsing — use the vision pass below, or balloon manually.
 - **Association is positional, not semantic.** The tool knows a callout's location
   on the sheet, not which feature it dimensions. Extracting that requires the CAD
   model, not the PDF.
 
+### Vision pass — local Ollama (optional)
+
+Covers what the text-layer parser structurally cannot: **scanned drawings,
+outlined text, and legacy symbol fonts.** The page calls Ollama running on the
+same machine, so the drawing is never uploaded anywhere — no cloud API, no
+vendor, nothing leaves the shop.
+
+**Setup**
+
+```bash
+ollama pull gemma3:12b        # 12B, multimodal. gemma3:27b reads small text noticeably better.
+```
+
+Ollama blocks cross-origin browser requests by default, so allow this page's
+origin and restart it:
+
+```bash
+# macOS / Linux
+OLLAMA_ORIGINS="http://localhost:8080" ollama serve
+
+# Windows PowerShell — then quit Ollama from the tray and reopen it
+setx OLLAMA_ORIGINS "http://localhost:8080"
+```
+
+Serve the folder over HTTP rather than opening the file from disk — a `file://`
+page has a null origin, which cannot be allowed:
+
+```bash
+npx http-server -p 8080
+```
+
+Then: **Connect** → pick the model → **Run vision pass on this sheet**. The
+"CORS help" button prints the exact command for whatever origin you are on.
+
+**How it works, and why it is built this way**
+
+- **Tiled, not whole-sheet.** A D-size drawing squeezed into one image renders
+  dimension text a few pixels tall and unreadable. The sheet is split into an
+  overlapping grid (default 2×2, raise it for dense drawings) and each region is
+  read separately at high DPI. Overlap stops a callout on a seam being cut in
+  half; duplicates are removed afterwards.
+- **The model does perception only.** It transcribes glyphs and returns rough
+  boxes. Every tolerance, limit, and inspection method is then computed by the
+  same deterministic parser used for the text layer — the model is never asked
+  to do arithmetic, so its errors stay confined to transcription.
+- **The prompt is closed-ended.** Open-ended prompts make small vision models
+  narrate geometry and invent plausible-looking dimensions. Asking only for
+  glyphs actually present keeps the failure mode at "missed a callout" rather
+  than "fabricated a callout".
+- **Text layer always wins.** Where both sources see the same callout, the exact
+  text-layer value is kept and the transcription is discarded. The number
+  suppressed is reported, so a genuinely repeated callout is not lost silently.
+- **Everything is flagged.** Vision results get purple balloons and a permanent
+  review flag. They are a starting point for the operator, not a result.
+
+**Expectations.** A 12B model reading a dense D-size drawing will miss callouts
+and misread digits — small vision models are weakest at exactly what matters
+here: tiny text, GD&T glyphs, and stacked tolerances. Treat it as a way to avoid
+typing a scanned drawing from scratch, not as an inspector. Read every balloon.
+
 ### Where this goes next
 
-The natural upgrade for scanned drawings and for feature association is a vision
-model pass (e.g. the Claude API) over each sheet region, returning structured
-characteristics that feed the same table and exporters. The extraction stage in
-`ballooning.js` is deliberately separated from numbering, rendering and export so
-a second extractor can be added without touching the rest of the pipeline. The
-step after that is reading the native CAD file, where dimensions, tolerances and
+The vision pass above closes the scanned-drawing gap. The remaining step is
+reading the native CAD file, where dimensions, tolerances and
 their owning features are already structured data — which removes the guesswork
 entirely.
 
@@ -135,6 +191,7 @@ entirely.
 |---|---|
 | `ballooning.html` | UI |
 | `ballooning.js` | extraction engine — PDF text → classified characteristics → exporters |
+| `vision.js` | optional vision pass — tiling, Ollama client, dedup |
 | `ballooning-ui.js` | viewer, balloon overlay, editable table, persistence |
 | `ballooning.css` | styles (scoped `.bl-*`) |
 
