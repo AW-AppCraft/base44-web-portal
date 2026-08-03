@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drawing Ballooning &amp; FAIR/ISIR Automation</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+          onerror="document.documentElement.classList.add('no-iconfont')">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="ballooning.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-brand"><i class="fas fa-rocket"></i> Base44 Apps Portal</div>
+            <div class="navbar-menu">
+                <a href="index.html" class="nav-link"><i class="fas fa-home"></i> Home</a>
+                <a href="dashboard.html" class="nav-link"><i class="fas fa-th-large"></i> My Apps</a>
+                <a href="ballooning.html" class="nav-link active"><i class="fas fa-ruler-combined"></i> Ballooning</a>
+                <a href="subscriptions.html" class="nav-link"><i class="fas fa-credit-card"></i> Subscriptions</a>
+            </div>
+        </div>
+    </nav>
+
+    <header class="bl-header">
+        <h1><i class="fas fa-ruler-combined"></i> Drawing Ballooning &amp; FAIR/ISIR Automation</h1>
+        <p>Extracts dimensions, GD&amp;T feature control frames, threads, surface finishes, material
+           and coating specs from a drawing PDF, highlights each one, assigns characteristic numbers,
+           and exports an AS9102 Form 3 or PPAP dimensional results sheet.</p>
+    </header>
+
+    <div class="bl-layout">
+        <!-- ---------------------------------------------------------------- -->
+        <aside class="bl-sidebar">
+            <section class="bl-panel">
+                <h3><i class="fas fa-file-pdf"></i> Drawing</h3>
+                <input type="file" id="fileInput" accept="application/pdf">
+                <p class="hint">Vector PDFs exported from CAD work best. Scanned drawings have no text
+                   layer and must be ballooned manually or pre-processed with OCR.</p>
+            </section>
+
+            <section class="bl-panel">
+                <h3><i class="fas fa-sliders-h"></i> Extraction settings</h3>
+                <label>Units
+                    <select id="unit">
+                        <option value="mm">mm</option>
+                        <option value="in">in</option>
+                    </select>
+                </label>
+
+                <p class="sub">Default tolerances from the title block, applied to untoleranced dimensions:</p>
+                <div class="grid2">
+                    <label>.X <input type="number" id="tolOne" step="any" value="0.5"></label>
+                    <label>.XX <input type="number" id="tolTwo" step="any" value="0.25"></label>
+                    <label>.XXX <input type="number" id="tolThree" step="any" value="0.1"></label>
+                    <label>Angular ° <input type="number" id="tolAngular" step="any" value="0.5"></label>
+                </div>
+
+                <p class="sub">Drawing border zone grid (0 to disable):</p>
+                <div class="grid2">
+                    <label>Rows <input type="number" id="zoneRows" value="0" min="0" max="12"></label>
+                    <label>Cols <input type="number" id="zoneCols" value="0" min="0" max="12"></label>
+                </div>
+
+                <label class="inline"><input type="checkbox" id="includeNotes" checked> Include general notes</label>
+                <button class="btn btn-primary block" id="reprocess"><i class="fas fa-sync"></i> Re-run extraction</button>
+            </section>
+
+            <section class="bl-panel">
+                <h3><i class="fas fa-id-card"></i> FAIR header</h3>
+                <label>Part number <input type="text" id="partNumber"></label>
+                <label>Part name <input type="text" id="partName"></label>
+                <label>Drawing number <input type="text" id="drawingNumber"></label>
+                <label>Revision <input type="text" id="revision"></label>
+                <label>FAIR number <input type="text" id="fairNumber"></label>
+                <label>Serial number <input type="text" id="serialNumber"></label>
+                <label>Supplier <input type="text" id="supplier"></label>
+                <label>PPAP sample size <input type="number" id="sampleSize" value="5" min="1" max="30"></label>
+            </section>
+
+            <section class="bl-panel">
+                <h3><i class="fas fa-file-export"></i> Export</h3>
+                <button class="btn btn-secondary block" id="exportForm3"><i class="fas fa-table"></i> AS9102 Form 3 (CSV)</button>
+                <button class="btn btn-secondary block" id="exportPpap"><i class="fas fa-clipboard-check"></i> PPAP / ISIR results (CSV)</button>
+                <button class="btn btn-secondary block" id="exportPng"><i class="fas fa-image"></i> Ballooned sheet (PNG)</button>
+                <button class="btn btn-secondary block" id="exportJson"><i class="fas fa-code"></i> Project (JSON)</button>
+                <div class="split">
+                    <button class="btn btn-ghost" id="saveLocal"><i class="fas fa-save"></i> Save</button>
+                    <button class="btn btn-ghost" id="loadLocal"><i class="fas fa-folder-open"></i> Load saved</button>
+                </div>
+            </section>
+        </aside>
+
+        <!-- ---------------------------------------------------------------- -->
+        <main class="bl-main">
+            <div class="bl-toolbar">
+                <button class="btn btn-ghost" id="prevPage" title="Previous sheet" aria-label="Previous sheet"><i class="fas fa-chevron-left"></i><span class="icon-fallback">&#8249;</span></button>
+                <span id="pageLabel">No drawing loaded</span>
+                <button class="btn btn-ghost" id="nextPage" title="Next sheet" aria-label="Next sheet"><i class="fas fa-chevron-right"></i><span class="icon-fallback">&#8250;</span></button>
+                <span class="sep"></span>
+                <button class="btn btn-ghost" id="zoomOut" title="Zoom out" aria-label="Zoom out"><i class="fas fa-search-minus"></i><span class="icon-fallback">&minus;</span></button>
+                <button class="btn btn-ghost" id="zoomIn" title="Zoom in" aria-label="Zoom in"><i class="fas fa-search-plus"></i><span class="icon-fallback">+</span></button>
+                <span class="sep"></span>
+                <button class="btn btn-ghost" id="addBalloon"><i class="fas fa-plus-circle"></i> Add balloon</button>
+                <button class="btn btn-ghost" id="renumber"><i class="fas fa-sort-numeric-down"></i> Renumber</button>
+                <button class="btn btn-ghost danger" id="clearAll"><i class="fas fa-trash"></i> Clear</button>
+            </div>
+
+            <div class="status" id="status"></div>
+
+            <div class="bl-viewer" id="viewer">
+                <div class="bl-empty" id="emptyState">
+                    <i class="fas fa-drafting-compass"></i>
+                    <p>Load a drawing PDF to extract and balloon its characteristics.</p>
+                </div>
+                <div class="bl-canvas-wrap">
+                    <canvas id="pdfCanvas"></canvas>
+                    <div class="bl-overlay" id="overlay"></div>
+                </div>
+            </div>
+
+            <div class="bl-summary" id="summary"></div>
+
+            <div class="bl-table-wrap">
+                <table class="bl-table" id="charTable">
+                    <thead>
+                        <tr>
+                            <th>No.</th>
+                            <th>Location</th>
+                            <th>Type</th>
+                            <th>Requirement</th>
+                            <th>Nominal</th>
+                            <th>Lower</th>
+                            <th>Upper</th>
+                            <th>Inspection method</th>
+                            <th>Key</th>
+                            <th>Flags</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="charBody"></tbody>
+                </table>
+            </div>
+
+            <section class="bl-note">
+                <h3><i class="fas fa-triangle-exclamation"></i> Before you submit a FAIR with this</h3>
+                <ul>
+                    <li>Extraction is an accelerator, not an authority. AS9102 makes the supplier
+                        responsible for characteristic accountability — every balloon still needs a
+                        human check against the print.</li>
+                    <li><strong>Basic dimensions cannot be detected from text alone.</strong> The box
+                        around a basic dimension is drawing geometry, not text, so untoleranced
+                        dimensions are flagged for review rather than guessed at.</li>
+                    <li>Drawings using legacy CAD symbol fonts (gdt.shx and relatives) map GD&amp;T
+                        glyphs onto ASCII letters. Those frames are remapped best-effort and always
+                        flagged — verify the mapping on a known drawing first.</li>
+                    <li>Scanned drawings have no text layer. Nothing will be extracted; use manual
+                        ballooning or pre-process the file with OCR or a vision model.</li>
+                </ul>
+            </section>
+        </main>
+    </div>
+
+    <!-- PDF.js is loaded from CDN by default. To run air-gapped (common for
+         ITAR/EAR-controlled drawings), drop pdf.min.js and pdf.worker.min.js
+         beside this file and set PDFJS_LOCAL below to true. -->
+    <script>window.PDFJS_LOCAL = false;</script>
+    <script>
+        (function () {
+            var base = window.PDFJS_LOCAL
+                ? ''
+                : 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+            var s = document.createElement('script');
+            s.src = base + 'pdf.min.js';
+            s.onload = function () {
+                window.pdfjsLib.GlobalWorkerOptions.workerSrc = base + 'pdf.worker.min.js';
+                document.dispatchEvent(new Event('pdfjs-ready'));
+            };
+            s.onerror = function () {
+                var st = document.getElementById('status');
+                if (st) {
+                    st.className = 'status error';
+                    st.textContent = 'PDF.js could not be loaded from the CDN. If this machine has ' +
+                        'no internet access, download pdf.min.js and pdf.worker.min.js next to ' +
+                        'ballooning.html and set PDFJS_LOCAL = true in this page.';
+                }
+                var fi = document.getElementById('fileInput');
+                if (fi) fi.disabled = true;
+            };
+            document.head.appendChild(s);
+        })();
+    </script>
+    <script src="ballooning.js"></script>
+    <script src="ballooning-ui.js"></script>
+</body>
+</html>
