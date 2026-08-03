@@ -36,7 +36,19 @@ Also new:
 * **Rolling chart window.** v12.1 always plotted rows 5–204, so charts froze once
   you passed 200 samples. Charts now follow the **most recent** `Settings!F5`
   points (default 200) and keep scrolling as data arrives.
-### Bugs found in the first v13 builds and fixed
+* **Capability** gained median, min, max, range, overall sigma, tolerance width,
+  an In-Spec check and a plain-English verdict, and it no longer computes
+  Cp/Cpk from a blank spec limit read as zero — a real bug in v12.1, where an
+  empty USL/LSL evaluated to `0` and produced meaningless capability numbers.
+* **Monitor** gained an all-feature status table (last value, mean, range, Cpk,
+  in control, in spec, verdict) with red/green conditional formatting — the
+  at-a-glance panel for a shop-floor screen.
+
+---
+
+## Bugs found and fixed
+
+### In the first v13 builds
 
 **Hidden helper columns stopped the charts drawing.** Excel plots *visible cells
 only* unless a chart says otherwise (`plotVisOnly`). v13 tidied the helper blocks
@@ -46,8 +58,6 @@ their data out of hidden columns and rendered empty. Unhiding the columns made
 them appear, which is exactly the symptom reported. All 45 charts now set
 `visible_cells_only = False`, so the columns stay tidy *and* the charts draw.
 `validate_v13.py` fails any chart that reads a hidden column without it.
-
-
 
 **A missing `=`.** Five of the fourteen statistics rows on Data Entry — **Mean, Min, Max, Range and
 Median** — were written **without their leading `=`**, so Excel stored them as
@@ -63,7 +73,7 @@ function call but has no `=`, so this class of bug cannot ship again.
 This was a formula bug, not a macro problem — the charts have never needed a
 macro to populate.
 
-### Bugs found in v12.1 and fixed
+### In v12.1
 
 **The Visual SPC histogram never drew any bars.** Every cell of its `BinCnt`
 column (`AB7:AB26`) read:
@@ -97,14 +107,6 @@ counts the whole filtered set (`_Calc!$D$5:$D$10004`).
 Note the filter cells moved: v12.1 used `C4` as a single exact date match. v13
 uses `C4` as date-from and `E4` as date-to, with shift/operator/tool at `G4`,
 `I4` and `K4`.
-
-* **Capability** gained median, min, max, range, overall sigma, tolerance width,
-  an In-Spec check and a plain-English verdict, and it no longer computes
-  Cp/Cpk from a blank spec limit read as zero — a real bug in v12.1, where an
-  empty USL/LSL evaluated to `0` and produced meaningless capability numbers.
-* **Monitor** gained an all-feature status table (last value, mean, range, Cpk,
-  in control, in spec, verdict) with red/green conditional formatting — the
-  at-a-glance panel for a shop-floor screen.
 
 ---
 
