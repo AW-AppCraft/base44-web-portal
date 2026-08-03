@@ -1406,6 +1406,24 @@ def build_how_to_use(wb):
          "#N/A points. Do not 'fix' those cells.")
     gap()
 
+    section("IF THE LINE LOOKS FLAT")
+    step(None, "What causes it",
+         "A process running at, say, 7.43 +/- 0.01 has a spread of 0.02 on a "
+         "value of 7.43. If the value axis starts at zero, all that variation "
+         "collapses into one flat line.")
+    step(None, "Press 'Fit Charts To Data'",
+         "The button on the right rescales every X and mR chart to its own data "
+         "plus the control and spec limits, with a small margin, so the "
+         "variation fills the plot area. It also runs on open, on refresh and "
+         "after every import - you should rarely need the button.")
+    step(None, "No macros? Do it by hand",
+         "Right-click the value axis > Format Axis > Bounds, and set Minimum "
+         "and Maximum around your limits. Excel remembers it per chart.")
+    step(None, "Histograms stay anchored at zero",
+         "That is deliberate - a frequency axis has to start at zero to be "
+         "read honestly.")
+    gap()
+
     section("CHART COLOUR KEY")
     step(None, "Blue line + markers", "Individual measurements")
     step(None, "Green dashed", "CL - the process mean")

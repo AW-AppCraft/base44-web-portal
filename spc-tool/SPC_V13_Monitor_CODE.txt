@@ -51,6 +51,7 @@ Private KioskSlot As Long
 Sub Auto_Open()
     On Error Resume Next
     SPC_BuildButtons
+    SPC_AutoScale
     On Error GoTo 0
 End Sub
 
@@ -86,6 +87,7 @@ Private Sub BuildPanel(ws As Worksheet, anchor As String, full As Boolean)
     y = y + AddButton(ws, "Start Monitoring", "SPC_StartMonitor", x0, y, BW, BH, RGB(0, 130, 60)) + GAPY
     y = y + AddButton(ws, "Stop Monitoring", "SPC_StopMonitor", x0, y, BW, BH, RGB(170, 40, 40)) + GAPY
     y = y + AddButton(ws, "Refresh All Charts", "SPC_RefreshAll", x0, y, BW, BH, RGB(31, 78, 121)) + GAPY
+    y = y + AddButton(ws, "Fit Charts To Data", "SPC_AutoScale", x0, y, BW, BH, RGB(31, 78, 121)) + GAPY
     y = y + AddButton(ws, "Screen / Kiosk Mode", "SPC_KioskMode", x0, y, BW, BH, RGB(112, 48, 160)) + GAPY
     y = y + AddButton(ws, "Stop Kiosk Mode", "SPC_KioskStop", x0, y, BW, BH, RGB(90, 90, 90)) + GAPY
 
@@ -194,7 +196,87 @@ Sub SPC_RefreshAll()
     RefreshCharts ThisWorkbook.Sheets("Control Charts")
     RefreshCharts Mon()
     RefreshCharts ThisWorkbook.Sheets("Visual SPC")
+    SPC_AutoScale
     DoEvents
+End Sub
+
+' ============================================================
+' AUTO-SCALE
+' Excel's automatic value axis often anchors at zero. On a process running at,
+' say, 7.43 +/- 0.01 that squashes every point into a flat line and you cannot
+' see the spread at all. This rescales each X and mR chart to its own data plus
+' the control and spec limits, with an 8% margin, so the variation fills the
+' plot area.
+'
+' Histograms are skipped on purpose - a frequency axis belongs at zero.
+' ============================================================
+Sub SPC_AutoScale()
+    AutoScaleSheet ThisWorkbook.Sheets("Control Charts")
+    AutoScaleSheet Mon()
+    AutoScaleSheet ThisWorkbook.Sheets("Visual SPC")
+End Sub
+
+Private Sub AutoScaleSheet(ws As Worksheet)
+    Dim co As ChartObject
+    On Error Resume Next
+    For Each co In ws.ChartObjects
+        AutoScaleChart co.Chart
+    Next co
+    On Error GoTo 0
+End Sub
+
+Private Sub AutoScaleChart(ch As Chart)
+    Dim sc As Series, v As Variant, i As Long
+    Dim lo As Double, hi As Double, pad As Double
+    Dim got As Boolean, t As Long
+
+    t = 0
+    On Error Resume Next
+    t = ch.ChartType
+    On Error GoTo 0
+    If t = xlColumnClustered Or t = xlColumnStacked Or _
+       t = xlBarClustered Or t = xlBarStacked Then Exit Sub
+
+    lo = 1E+308
+    hi = -1E+308
+
+    On Error Resume Next
+    For Each sc In ch.SeriesCollection
+        v = sc.Values
+        If IsArray(v) Then
+            For i = LBound(v) To UBound(v)
+                If Not IsError(v(i)) Then
+                    If Not IsEmpty(v(i)) Then
+                        If IsNumeric(v(i)) Then
+                            If CDbl(v(i)) < lo Then lo = CDbl(v(i))
+                            If CDbl(v(i)) > hi Then hi = CDbl(v(i))
+                            got = True
+                        End If
+                    End If
+                End If
+            Next i
+        End If
+    Next sc
+    On Error GoTo 0
+
+    If Not got Then Exit Sub
+
+    If hi <= lo Then
+        ' every point identical - still give it a visible band
+        pad = Abs(hi) * 0.002
+        If pad = 0 Then pad = 0.5
+    Else
+        pad = (hi - lo) * 0.08
+    End If
+
+    On Error Resume Next
+    With ch.Axes(xlValue)
+        .MinimumScaleIsAuto = False
+        .MaximumScaleIsAuto = False
+        .MinimumScale = lo - pad
+        .MaximumScale = hi + pad
+    End With
+    On Error GoTo 0
 End Sub
 
 ' ============================================================
