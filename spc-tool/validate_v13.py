@@ -118,11 +118,38 @@ def chart_ranges(chart):
                     yield sheet.strip("'"), c1, int(r1), int(r2 or r1)
 
 
+def hidden_columns(ws):
+    """Column letters hidden outright or by a collapsed outline group."""
+    hidden = set()
+    for key, dim in ws.column_dimensions.items():
+        if not dim.hidden:
+            continue
+        if dim.min and dim.max:
+            for i in range(dim.min, dim.max + 1):
+                hidden.add(get_column_letter(i))
+        else:
+            hidden.add(key)
+    return hidden
+
+
 def check_charts(wb, problems):
     total = 0
     for ws in wb.worksheets:
+        hidden_by_sheet = {s: hidden_columns(wb[s]) for s in wb.sheetnames}
         for chart in getattr(ws, "_charts", []):
             total += 1
+            # Excel plots only visible cells unless told otherwise. Every helper
+            # block in this workbook lives in hidden columns, so a chart left at
+            # the default draws nothing at all - the failure looks exactly like
+            # "my formulas are broken".
+            if getattr(chart, "visible_cells_only", True):
+                srcs = {f"{s}!{c}" for s, c, _, _ in chart_ranges(chart)
+                        if c in hidden_by_sheet.get(s, ())}
+                if srcs:
+                    problems.append(
+                        f"chart on {ws.title} reads hidden columns "
+                        f"({', '.join(sorted(srcs)[:3])}) but visible_cells_only "
+                        f"is True - it will render empty")
             for sheet, col, r1, r2 in chart_ranges(chart):
                 if sheet not in wb.sheetnames:
                     problems.append(f"chart on {ws.title} points at missing sheet {sheet}")

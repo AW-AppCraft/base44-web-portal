@@ -588,7 +588,9 @@ def add_x_chart(ws, base_col, anchor, title, width=22, height=8.5):
         ch.add_data(ref, titles_from_data=True)
         styled_line(ch.series[-1], colour, 22000 if key == "x" else 14000, dash, False, marker)
     ch.set_categories(cats)
-    ch.dispBlanksAs = "gap"
+    ch.display_blanks = "gap"
+    # helper columns are hidden; without this Excel plots nothing
+    ch.visible_cells_only = False
     ws.add_chart(ch, anchor)
     return ch
 
@@ -610,7 +612,9 @@ def add_mr_chart(ws, base_col, anchor, title, width=22, height=6.5):
                     None, False, marker)
     ch.set_categories(Reference(ws, min_col=B("idx"), min_row=HELPER_FIRST,
                                 max_row=HELPER_LAST))
-    ch.dispBlanksAs = "gap"
+    ch.display_blanks = "gap"
+    # helper columns are hidden; without this Excel plots nothing
+    ch.visible_cells_only = False
     ws.add_chart(ch, anchor)
     return ch
 
@@ -640,7 +644,10 @@ def add_hist_chart(ws, base_col, anchor, title, width=13, height=8.5):
                                 max_row=last), titles_from_data=True)
         styled_line(line.series[-1], colour, 22000, "lgDash")
     bar += line
-    bar.dispBlanksAs = "gap"
+    bar.display_blanks = "gap"
+    # helper columns are hidden; without this Excel plots nothing
+    bar.visible_cells_only = False
+    line.visible_cells_only = False
     ws.add_chart(bar, anchor)
     return bar
 

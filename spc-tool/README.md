@@ -36,9 +36,20 @@ Also new:
 * **Rolling chart window.** v12.1 always plotted rows 5–204, so charts froze once
   you passed 200 samples. Charts now follow the **most recent** `Settings!F5`
   points (default 200) and keep scrolling as data arrives.
-### Bug found in the first v13 build and fixed
+### Bugs found in the first v13 builds and fixed
 
-Five of the fourteen statistics rows on Data Entry — **Mean, Min, Max, Range and
+**Hidden helper columns stopped the charts drawing.** Excel plots *visible cells
+only* unless a chart says otherwise (`plotVisOnly`). v13 tidied the helper blocks
+away into hidden columns — something v12.1 never did, it just parked them far to
+the right — and every one of the 45 charts inherited the default, so they read
+their data out of hidden columns and rendered empty. Unhiding the columns made
+them appear, which is exactly the symptom reported. All 45 charts now set
+`visible_cells_only = False`, so the columns stay tidy *and* the charts draw.
+`validate_v13.py` fails any chart that reads a hidden column without it.
+
+
+
+**A missing `=`.** Five of the fourteen statistics rows on Data Entry — **Mean, Min, Max, Range and
 Median** — were written **without their leading `=`**, so Excel stored them as
 inert text (250 cells). Capability reads Mean/Min/Max from those cells, and the
 chart helpers read Capability, so the control limits, the spec lines and the
