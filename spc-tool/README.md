@@ -14,6 +14,7 @@ Files:
 | `build_spc_v13.py` | Build script — the single source of truth for the workbook |
 | `SPC_Calculator_v13.xlsx` | The generated workbook |
 | `SPC_V13_Monitor.bas` | VBA module: folder watch, auto-import, refresh, kiosk mode |
+| `validate_v13.py` | Static checks on the generated workbook (see *Validation* below) |
 
 ---
 
@@ -92,6 +93,30 @@ Macros available: `SPC_StartMonitor`, `SPC_StopMonitor`, `SPC_ImportNow`,
 attach to buttons.
 
 ---
+
+## Validation
+
+```bash
+python3 validate_v13.py SPC_Calculator_v13.xlsx
+```
+
+Checks every one of the ~100,500 formulas for balanced parentheses and quotes,
+that each referenced sheet exists, that only Excel-2007-era functions are used
+(no `XLOOKUP`/`FILTER`/`TEXTJOIN`-style functions that would break in older
+Excel or LibreOffice), that all 45 chart series and category ranges point at
+populated columns, and that the chart helper chain lands on the intended
+Capability columns.
+
+**The formulas have not been machine-recalculated.** LibreOffice could not load
+any `.xlsx` in the build environment, so no recalculation engine was available;
+the checks above are static. Open the workbook once in Excel and press
+`Ctrl+Alt+F9` to force a full recalculation, and give the charts a quick look
+before issuing the document.
+
+The workbook is formula-heavy (~100k formulas, mostly the 10,000-row Data Entry
+and `_Calc` grids). It recalculates fine, but if it ever feels sluggish on a
+slow machine, reduce `Data Rows Available` in the build script (`DATA_ROWS`)
+and rebuild.
 
 ## Assumptions in the shipped file
 

@@ -894,8 +894,11 @@ def build_monitor(wb):
                 f"INDEX('Data Entry'!$H${DATA_FIRST}:${CL(FEAT_COL_LAST)}"
                 f"${DATA_LAST},{pos}-{DATA_FIRST - 1},{sel})"),
         }
-        hist = (f"OFFSET('Data Entry'!$H${DATA_FIRST},0,{sel}-1,"
-                f"{DATA_ROWS},1)")
+        # INDEX(range,0,n) yields the whole n-th column as a reference and,
+        # unlike OFFSET, is not volatile - the histogram COUNTIFS then only
+        # recalculate when their inputs actually change.
+        hist = (f"INDEX('Data Entry'!$H${DATA_FIRST}:${CL(FEAT_COL_LAST)}"
+                f"${DATA_LAST},0,{sel})")
         write_helper_block(ws, base, refs, "Settings!$F$5", hist, "Settings!$F$6")
 
         add_x_chart(ws, base, f"D{top}", f"Slot {slot + 1} - Individuals (X)",
