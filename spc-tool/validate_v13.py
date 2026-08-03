@@ -188,11 +188,20 @@ def check_capability_targets(wb, problems):
             problems.append(
                 f"Control Charts!{addr} ({key}) should reference {want}; got: {got[:80]}")
 
-    # histogram bin bounds must use Min/Max plus LSL/USL
-    lo = cc["CG1"].value or ""
-    for header in ("Min", "Max", "LSL", "USL"):
-        if f"Capability!${headers[header]}$5" not in lo:
-            problems.append(f"Control Charts!CG1 (bin Lo) does not reference {header}")
+    # Raw histogram bounds must span the data and every limit, so that the
+    # spec spikes and the control spikes both land inside the plotted bins.
+    for addr, name, needed in (("CO1", "RawLo", ("Min", "LSL", "X LCL")),
+                               ("CQ1", "RawHi", ("Max", "USL", "X UCL"))):
+        formula = cc[addr].value or ""
+        for header in needed:
+            if f"Capability!${headers[header]}$5" not in formula:
+                problems.append(
+                    f"Control Charts!{addr} ({name}) does not reference {header} "
+                    f"- that limit could fall outside the histogram bins")
+    # and the padded Lo/Hi must derive from those raw bounds
+    for addr, raw in (("CG1", "CO1"), ("CM1", "CQ1")):
+        if raw.rstrip("1") not in (cc[addr].value or ""):
+            problems.append(f"Control Charts!{addr} does not derive from {raw}")
 
 
 def main(path):

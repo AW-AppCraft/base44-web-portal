@@ -467,54 +467,80 @@ def build_capability(wb):
 HELPER_OFFSETS = {
     "idx": 0, "x": 1, "cl": 2, "ucl": 3, "lcl": 4, "mr": 5, "mrucl": 6,
     "usl": 7, "lsl": 8, "bin": 9, "cnt": 10, "lslmark": 11, "uslmark": 12,
+    # 13 is spare on Control Charts / Monitor, SrcRow on Visual SPC
+    "uclmark": 14, "lclmark": 15,
 }
-HELPER_WIDTH = 14
+HELPER_WIDTH = 16
+
+# Overlay spikes on the histogram: (helper key, colour, height as a multiple of
+# the tallest bar). Spec and control limits sit at different heights so that two
+# limits landing in the same bin stay visible.
+HIST_MARKS = [
+    ("lslmark", C_SPEC, 1.15, "LSL"),
+    ("uslmark", C_SPEC, 1.15, "USL"),
+    ("uclmark", C_CTRL, 1.04, "UCL"),
+    ("lclmark", C_CTRL, 1.04, "LCL"),
+]
 HELPER_HEAD_ROW = 3
 HELPER_FIRST = 4
 HELPER_LAST = HELPER_FIRST + WINDOW - 1
 
 
-def bin_bounds(min_ref, max_ref, lsl_ref, usl_ref):
-    """Histogram bin limits: data min/max widened to cover LSL/USL, padded 5%.
+def bin_bounds(min_ref, max_ref, extra_lo, extra_hi):
+    """Raw histogram bounds: data min/max widened to cover every limit given.
 
-    Returns (lo_formula, hi_formula). Both give "" when there is no data, or
-    when every reading is identical (a zero-width range has no useful bins).
+    `extra_lo` / `extra_hi` are references to limits that must stay in frame
+    (LSL and LCL below, USL and UCL above). Any of them may be blank, in which
+    case it is skipped rather than dragging the range to zero.
+
+    Returns (raw_lo_formula, raw_hi_formula); the padded Lo/Hi and the bin width
+    are derived from these in their own cells, which keeps all four formulas
+    short enough to read.
     """
-    base_lo = f'IF({lsl_ref}="",{min_ref},MIN({min_ref},{lsl_ref}))'
-    base_hi = f'IF({usl_ref}="",{max_ref},MAX({max_ref},{usl_ref}))'
-    span = f"(({base_hi})-({base_lo}))"
-    guard = f'IF(OR({min_ref}="",{max_ref}="",{span}<=0),""'
-    return (f"={guard},({base_lo})-{span}*0.05)",
-            f"={guard},({base_hi})+{span}*0.05)")
+    lo = min_ref
+    for ref in extra_lo:
+        lo = f'IF({ref}="",{lo},MIN({lo},{ref}))'
+    hi = max_ref
+    for ref in extra_hi:
+        hi = f'IF({ref}="",{hi},MAX({hi},{ref}))'
+    return (f'=IF({min_ref}="","",{lo})', f'=IF({max_ref}="","",{hi})')
 
 
 def write_helper_block(ws, base_col, refs, window_ref, hist_range, hbin_ref):
-    """Write one 14-column helper block.
+    """Write one 16-column helper block.
 
     refs: dict of formula fragments -> lastrow, x_value(k), cl, ucl, lcl,
           mrucl, usl, lsl  (all as *formula text without leading '=')
     """
     B = lambda k: CL(base_col + HELPER_OFFSETS[k])  # noqa: E731
 
-    # scalar row 1: LastRow / Start / Lo / Width / MaxCnt / Hi
-    lo_c = CL(base_col + 5)
-    hi_c = CL(base_col + 11)
-    wd_c = CL(base_col + 7)
-    mx_c = CL(base_col + 9)
+    # scalar row 1, in label/value pairs across the block
     lr_c = CL(base_col + 1)
     st_c = CL(base_col + 3)
+    lo_c = CL(base_col + 5)
+    wd_c = CL(base_col + 7)
+    mx_c = CL(base_col + 9)
+    hi_c = CL(base_col + 11)
+    rlo_c = CL(base_col + 13)
+    rhi_c = CL(base_col + 15)
 
-    lo, hi = bin_bounds(refs["min"], refs["max"], refs["lsl"], refs["usl"])
+    raw_lo, raw_hi = bin_bounds(refs["min"], refs["max"],
+                                (refs["lsl"], refs["lcl"]),
+                                (refs["usl"], refs["ucl"]))
+    span = f"({rhi_c}1-{rlo_c}1)"
+    pad_guard = f'IF(OR({rlo_c}1="",{rhi_c}1="",{rhi_c}1<={rlo_c}1),""'
     scal_vals = {
         "LastRow": f'={refs["lastrow"]}',
         "Start": f"=MAX({DATA_FIRST},{lr_c}1-{window_ref}+1)",
-        "Lo": lo,
-        "Hi": hi,
+        "RawLo": raw_lo,
+        "RawHi": raw_hi,
+        "Lo": f"={pad_guard},{rlo_c}1-{span}*0.05)",
+        "Hi": f"={pad_guard},{rhi_c}1+{span}*0.05)",
         "Width": (f'=IF(OR({lo_c}1="",{hi_c}1="",{hi_c}1<={lo_c}1),"",'
                   f"({hi_c}1-{lo_c}1)/{hbin_ref})"),
         "MaxCnt": f"=MAX({B('cnt')}{HELPER_FIRST}:{B('cnt')}{HELPER_FIRST+NBINS-1})",
     }
-    order = ["LastRow", "Start", "Lo", "Width", "MaxCnt", "Hi"]
+    order = ["LastRow", "Start", "Lo", "Width", "MaxCnt", "Hi", "RawLo", "RawHi"]
     for i, name in enumerate(order):
         ws.cell(row=1, column=base_col + i * 2, value=name).font = F_SMALL
         c = ws.cell(row=1, column=base_col + i * 2 + 1, value=scal_vals[name])
@@ -522,7 +548,7 @@ def write_helper_block(ws, base_col, refs, window_ref, hist_range, hbin_ref):
         c.number_format = NUM4
 
     heads = ["idx", "X", "CL", "UCL", "LCL", "mR", "mR_UCL", "USL", "LSL",
-             "Bin", "Count", "LSLmark", "USLmark", ""]
+             "Bin", "Count", "LSL", "USL", "", "UCL", "LCL"]
     for i, h in enumerate(heads):
         ws.cell(row=HELPER_HEAD_ROW, column=base_col + i, value=h).font = F_SMALL
 
@@ -561,11 +587,12 @@ def write_helper_block(ws, base_col, refs, window_ref, hist_range, hbin_ref):
         ws.cell(row=r, column=base_col + HELPER_OFFSETS["cnt"],
                 value=(f'=IF({wd_c}$1="","",COUNTIFS({hist_range},">="&{lo_e},'
                        f'{hist_range},"{op}"&{hi_e}))'))
-        for key, ref in (("lslmark", refs["lsl"]), ("uslmark", refs["usl"])):
+        for key, _colour, height, _name in HIST_MARKS:
+            ref = refs[key.replace("mark", "")]
             ws.cell(row=r, column=base_col + HELPER_OFFSETS[key],
                     value=(f'=IF(OR({ref}="",{wd_c}$1=""),NA(),'
                            f"IF(AND({ref}>={lo_e},{ref}<{hi_e}),"
-                           f"{mx_c}$1*1.15,NA()))"))
+                           f"{mx_c}$1*{height},NA()))"))
     return B
 
 
@@ -638,11 +665,15 @@ def add_hist_chart(ws, base_col, anchor, title, width=13, height=8.5):
     bar.series[0].graphicalProperties.line.solidFill = BLUE
     bar.set_categories(Reference(ws, min_col=B("bin"), min_row=HELPER_FIRST, max_row=last))
 
+    # Spec limits (purple, long-dash) and control limits (red) as vertical
+    # spikes over the bars, so the distribution can be read against both the
+    # tolerance and the voice of the process.
     line = LineChart()
-    for key, colour in (("lslmark", C_SPEC), ("uslmark", C_SPEC)):
+    for key, colour, _height, _name in HIST_MARKS:
         line.add_data(Reference(ws, min_col=B(key), min_row=HELPER_HEAD_ROW,
                                 max_row=last), titles_from_data=True)
-        styled_line(line.series[-1], colour, 22000, "lgDash")
+        dash = "lgDash" if colour == C_SPEC else None
+        styled_line(line.series[-1], colour, 22000, dash)
     bar += line
     bar.display_blanks = "gap"
     # helper columns are hidden; without this Excel plots nothing
@@ -1064,17 +1095,24 @@ def build_visual_spc(wb):
     B = lambda k: CL(base + HELPER_OFFSETS[k])  # noqa: E731
     tot_c, st_c = CL(base + 1), CL(base + 3)
     lo_c, wd_c, mx_c, hi_c = (CL(base + 5), CL(base + 7), CL(base + 9), CL(base + 11))
-    srow_c = CL(base + 13)     # spare column holds the matched source row
+    rlo_c, rhi_c = CL(base + 13), CL(base + 15)
+    srow_c = CL(base + 13)     # data rows of this column hold the matched source row
 
-    vs_lo, vs_hi = bin_bounds(f'$B${R["Min"]}', f'$B${R["Max"]}', lsl, usl)
+    vs_rlo, vs_rhi = bin_bounds(
+        f'$B${R["Min"]}', f'$B${R["Max"]}',
+        (lsl, f"$B${R['LCL']}"), (usl, f"$B${R['UCL']}"))
+    vs_span = f"({rhi_c}1-{rlo_c}1)"
+    vs_guard = f'IF(OR({rlo_c}1="",{rhi_c}1="",{rhi_c}1<={rlo_c}1),""'
     scal = [
         ("Total", f"=MAX({rank_col})"),
         ("Start", f"=MAX(1,{tot_c}1-Settings!$F$5+1)"),
-        ("Lo", vs_lo),
+        ("Lo", f"={vs_guard},{rlo_c}1-{vs_span}*0.05)"),
         ("Width", f'=IF(OR({lo_c}1="",{hi_c}1="",{hi_c}1<={lo_c}1),"",'
                   f"({hi_c}1-{lo_c}1)/Settings!$F$6)"),
         ("MaxCnt", f"=MAX({B('cnt')}{HELPER_FIRST}:{B('cnt')}{HELPER_FIRST + NBINS - 1})"),
-        ("Hi", vs_hi),
+        ("Hi", f"={vs_guard},{rhi_c}1+{vs_span}*0.05)"),
+        ("RawLo", vs_rlo),
+        ("RawHi", vs_rhi),
     ]
     for i, (name, formula) in enumerate(scal):
         ws.cell(row=1, column=base + i * 2, value=name).font = F_SMALL
@@ -1082,7 +1120,7 @@ def build_visual_spc(wb):
         cc.font, cc.number_format = F_SMALL, NUM4
 
     heads = ["idx", "X", "CL", "UCL", "LCL", "mR", "mR_UCL", "USL", "LSL",
-             "Bin", "Count", "LSLmark", "USLmark", "SrcRow"]
+             "Bin", "Count", "LSL", "USL", "SrcRow", "UCL", "LCL"]
     for i, h in enumerate(heads):
         ws.cell(row=HELPER_HEAD_ROW, column=base + i, value=h).font = F_SMALL
 
@@ -1115,11 +1153,14 @@ def build_visual_spc(wb):
         ws.cell(row=rr, column=base + HELPER_OFFSETS["cnt"],
                 value=(f'=IF({wd_c}$1="","",COUNTIFS({val_col},">="&{lo_e},'
                        f'{val_col},"{op}"&{hi_e}))'))
-        for key, ref in (("lslmark", lsl), ("uslmark", usl)):
+        mark_refs = {"lslmark": lsl, "uslmark": usl,
+                     "uclmark": f"$B${R['UCL']}", "lclmark": f"$B${R['LCL']}"}
+        for key, _colour, height, _name in HIST_MARKS:
+            ref = mark_refs[key]
             ws.cell(row=rr, column=base + HELPER_OFFSETS[key],
                     value=(f'=IF(OR({ref}="",{wd_c}$1=""),NA(),'
                            f"IF(AND({ref}>={lo_e},{ref}<{hi_e}),"
-                           f"{mx_c}$1*1.15,NA()))"))
+                           f"{mx_c}$1*{height},NA()))"))
 
     add_x_chart(ws, base, "D3", "Filtered Individuals (X)", width=21, height=8.5)
     add_hist_chart(ws, base, "S3", "Filtered Histogram", width=13, height=8.5)
@@ -1430,9 +1471,14 @@ def build_how_to_use(wb):
     step(None, "Red", "UCL / LCL - 3-sigma control limits calculated from mR-bar")
     step(None, "Purple long-dash", "USL / LSL - your specification limits")
     step(None, "Histogram bars",
-         "Distribution of all readings for that feature. The purple spikes mark "
-         "the bins holding LSL and USL, so you can see the distribution against "
-         "the tolerance rather than against itself.")
+         "Distribution of all readings for that feature.")
+    step(None, "Histogram spikes",
+         "Tall purple spikes mark the bins holding LSL and USL; shorter red "
+         "spikes mark UCL and LCL. Spec limits are what the customer demands, "
+         "control limits are what the process actually delivers - seeing both "
+         "against the distribution tells you whether you have a capability "
+         "problem, a stability problem, or both. The bin range always stretches "
+         "to include all four, so none of them can fall off the chart.")
     gap()
 
     section("WHAT EACH SHEET IS FOR")
