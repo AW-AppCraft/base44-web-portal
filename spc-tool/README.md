@@ -15,7 +15,7 @@ Files:
 | `SPC_Calculator_v13.xlsx` | The generated workbook |
 | `SPC_V13_Monitor.bas` | VBA module: folder watch, auto-import, refresh, kiosk mode |
 | `validate_v13.py` | Static checks on the generated workbook (see *Validation* below) |
-| `translator/` | Converts arbitrary CSV/Excel exports into SPC format before the monitor sees them — see `translator/README.md` |
+| `translator/` | **SPC_Translator.xlsx** + its macro module — converts arbitrary CSV/Excel exports into SPC format before the monitor sees them. See `translator/README.md` |
 | `test-data/` | Five sample import files + the CSV format spec |
 
 ---
