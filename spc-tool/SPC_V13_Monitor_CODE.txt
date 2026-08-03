@@ -391,7 +391,14 @@ Private Function ImportDelimited(path As String) As Long
         Line Input #ff, line
         line = Trim$(line)
         If Len(line) > 0 Then
-            parts = Split(Replace(line, vbTab, ","), ",")
+            ' tab-separated and semicolon-separated exports are common; treat
+            ' both as comma-separated. Semicolons only when there is no comma,
+            ' so a genuine comma file is never mangled.
+            line = Replace(line, vbTab, ",")
+            If InStr(line, ",") = 0 And InStr(line, ";") > 0 Then
+                line = Replace(line, ";", ",")
+            End If
+            parts = Split(line, ",")
             If WriteRow(ws, r, parts) Then
                 r = r + 1
                 added = added + 1
@@ -441,34 +448,56 @@ End Function
 
 ' Writes one parsed row. Returns True if it was a data row.
 Private Function WriteRow(ws As Worksheet, r As Long, parts() As String) As Boolean
-    Dim i As Long, n As Long, firstFeat As Long
-    n = UBound(parts) - LBound(parts) + 1
+    Dim i As Long, n As Long, firstFeat As Long, lo As Long
+    lo = LBound(parts)
+    n = UBound(parts) - lo + 1
     If n = 0 Then Exit Function
 
-    If IsNumeric(parts(LBound(parts))) Then
-        firstFeat = LBound(parts)                ' layout (b)
+    ' strip stray spaces and surrounding quotes from every field first
+    For i = lo To UBound(parts)
+        parts(i) = CleanField(parts(i))
+    Next i
+
+    If IsNumeric(parts(lo)) Then
+        firstFeat = lo                            ' layout (b): readings only
     Else
-        ' layout (a) - but a header row has no numeric fields at all
+        ' layout (a): 5 metadata fields then readings.
+        ' A header row has text where the first reading belongs, so it is skipped.
         If n < 6 Then Exit Function
-        If Not IsNumeric(parts(LBound(parts) + 5)) Then Exit Function
-        ws.Cells(r, 3).Value = parts(LBound(parts))       ' Date
-        ws.Cells(r, 4).Value = parts(LBound(parts) + 1)   ' Shift
-        ws.Cells(r, 5).Value = parts(LBound(parts) + 2)   ' Operator
-        ws.Cells(r, 6).Value = parts(LBound(parts) + 3)   ' Tool ID
-        ws.Cells(r, 7).Value = parts(LBound(parts) + 4)   ' Cluster
-        firstFeat = LBound(parts) + 5
+        If Not IsNumeric(parts(lo + 5)) Then Exit Function
+        ws.Cells(r, 3).Value = parts(lo)          ' Date
+        ws.Cells(r, 4).Value = parts(lo + 1)      ' Shift
+        ws.Cells(r, 5).Value = parts(lo + 2)      ' Operator
+        ws.Cells(r, 6).Value = parts(lo + 3)      ' Tool ID
+        ws.Cells(r, 7).Value = parts(lo + 4)      ' Cluster
+        firstFeat = lo + 5
     End If
 
-    Dim k As Long
+    Dim k As Long, written As Long
     k = 0
     For i = firstFeat To UBound(parts)
         If k >= MAX_FEAT Then Exit For
-        If IsNumeric(parts(i)) Then
-            ws.Cells(r, FEAT_COL + k).Value = CDbl(parts(i))
+        If Len(parts(i)) > 0 Then
+            If IsNumeric(parts(i)) Then
+                ws.Cells(r, FEAT_COL + k).Value = CDbl(parts(i))
+                written = written + 1
+            End If
         End If
         k = k + 1
     Next i
-    WriteRow = (k > 0)
+    ' only count it as a data row if at least one real reading landed
+    WriteRow = (written > 0)
+End Function
+
+Private Function CleanField(s As String) As String
+    Dim t As String
+    t = Trim$(s)
+    If Len(t) >= 2 Then
+        If Left$(t, 1) = """" And Right$(t, 1) = """" Then
+            t = Mid$(t, 2, Len(t) - 2)
+        End If
+    End If
+    CleanField = Trim$(t)
 End Function
 
 Private Function NextFreeRow(ws As Worksheet) As Long

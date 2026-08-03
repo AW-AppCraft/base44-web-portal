@@ -24,6 +24,7 @@ import datetime as _dt
 from openpyxl import Workbook
 from openpyxl.chart import BarChart, LineChart, Reference, Series
 from openpyxl.chart.marker import Marker
+from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.chart.data_source import NumDataSource, NumRef
 from openpyxl.drawing.line import LineProperties
 from openpyxl.formatting.rule import CellIsRule
@@ -475,11 +476,16 @@ HELPER_WIDTH = 16
 # Overlay spikes on the histogram: (helper key, colour, height as a multiple of
 # the tallest bar). Spec and control limits sit at different heights so that two
 # limits landing in the same bin stay visible.
+#
+# A limit lands in exactly one bin, so each of these series has a single
+# non-#N/A point. A line series with one point and no marker draws NOTHING,
+# which is why every marker below is explicit and large - the marker *is* the
+# visible flag, the line only matters if two limits land in adjacent bins.
 HIST_MARKS = [
-    ("lslmark", C_SPEC, 1.15, "LSL"),
-    ("uslmark", C_SPEC, 1.15, "USL"),
-    ("uclmark", C_CTRL, 1.04, "UCL"),
-    ("lclmark", C_CTRL, 1.04, "LCL"),
+    ("lslmark", C_SPEC, 1.15, "triangle", 12),
+    ("uslmark", C_SPEC, 1.15, "triangle", 12),
+    ("uclmark", C_CTRL, 1.04, "diamond", 10),
+    ("lclmark", C_CTRL, 1.04, "diamond", 10),
 ]
 HELPER_HEAD_ROW = 3
 HELPER_FIRST = 4
@@ -587,7 +593,7 @@ def write_helper_block(ws, base_col, refs, window_ref, hist_range, hbin_ref):
         ws.cell(row=r, column=base_col + HELPER_OFFSETS["cnt"],
                 value=(f'=IF({wd_c}$1="","",COUNTIFS({hist_range},">="&{lo_e},'
                        f'{hist_range},"{op}"&{hi_e}))'))
-        for key, _colour, height, _name in HIST_MARKS:
+        for key, _colour, height, _sym, _sz in HIST_MARKS:
             ref = refs[key.replace("mark", "")]
             ws.cell(row=r, column=base_col + HELPER_OFFSETS[key],
                     value=(f'=IF(OR({ref}="",{wd_c}$1=""),NA(),'
@@ -669,11 +675,15 @@ def add_hist_chart(ws, base_col, anchor, title, width=13, height=8.5):
     # spikes over the bars, so the distribution can be read against both the
     # tolerance and the voice of the process.
     line = LineChart()
-    for key, colour, _height, _name in HIST_MARKS:
+    for key, colour, _height, symbol, size in HIST_MARKS:
         line.add_data(Reference(ws, min_col=B(key), min_row=HELPER_HEAD_ROW,
                                 max_row=last), titles_from_data=True)
+        s = line.series[-1]
         dash = "lgDash" if colour == C_SPEC else None
-        styled_line(line.series[-1], colour, 22000, dash)
+        styled_line(s, colour, 22000, dash)
+        s.marker = Marker(symbol=symbol, size=size,
+                          spPr=GraphicalProperties(
+                              solidFill=colour, ln=LineProperties(solidFill=colour)))
     bar += line
     bar.display_blanks = "gap"
     # helper columns are hidden; without this Excel plots nothing
@@ -1155,7 +1165,7 @@ def build_visual_spc(wb):
                        f'{val_col},"{op}"&{hi_e}))'))
         mark_refs = {"lslmark": lsl, "uslmark": usl,
                      "uclmark": f"$B${R['UCL']}", "lclmark": f"$B${R['LCL']}"}
-        for key, _colour, height, _name in HIST_MARKS:
+        for key, _colour, height, _sym, _sz in HIST_MARKS:
             ref = mark_refs[key]
             ws.cell(row=rr, column=base + HELPER_OFFSETS[key],
                     value=(f'=IF(OR({ref}="",{wd_c}$1=""),NA(),'

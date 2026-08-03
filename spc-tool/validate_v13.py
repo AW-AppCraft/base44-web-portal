@@ -150,6 +150,24 @@ def check_charts(wb, problems):
                         f"chart on {ws.title} reads hidden columns "
                         f"({', '.join(sorted(srcs)[:3])}) but visible_cells_only "
                         f"is True - it will render empty")
+            # Limit spikes overlaid on a histogram have one non-#N/A point
+            # each. A line series with a single point and no marker renders as
+            # nothing at all, so the limits become invisible.
+            # (openpyxl puts the chart itself in _charts, so skip it: a full
+            # 200-point control-limit line needs no marker.)
+            for sub in getattr(chart, "_charts", []):
+                if sub is chart or type(chart).__name__ != "BarChart":
+                    continue
+                if type(sub).__name__ != "LineChart":
+                    continue
+                for s in sub.series:
+                    sym = s.marker.symbol if s.marker else None
+                    if sym in (None, "none"):
+                        ref = s.val.numRef.f if s.val and s.val.numRef else "?"
+                        problems.append(
+                            f"overlay series {ref} on {ws.title} has no marker - "
+                            f"a single-point series will render invisible")
+
             for sheet, col, r1, r2 in chart_ranges(chart):
                 if sheet not in wb.sheetnames:
                     problems.append(f"chart on {ws.title} points at missing sheet {sheet}")
