@@ -472,6 +472,20 @@ HELPER_FIRST = 4
 HELPER_LAST = HELPER_FIRST + WINDOW - 1
 
 
+def bin_bounds(min_ref, max_ref, lsl_ref, usl_ref):
+    """Histogram bin limits: data min/max widened to cover LSL/USL, padded 5%.
+
+    Returns (lo_formula, hi_formula). Both give "" when there is no data, or
+    when every reading is identical (a zero-width range has no useful bins).
+    """
+    base_lo = f'IF({lsl_ref}="",{min_ref},MIN({min_ref},{lsl_ref}))'
+    base_hi = f'IF({usl_ref}="",{max_ref},MAX({max_ref},{usl_ref}))'
+    span = f"(({base_hi})-({base_lo}))"
+    guard = f'IF(OR({min_ref}="",{max_ref}="",{span}<=0),""'
+    return (f"={guard},({base_lo})-{span}*0.05)",
+            f"={guard},({base_hi})+{span}*0.05)")
+
+
 def write_helper_block(ws, base_col, refs, window_ref, hist_range, hbin_ref):
     """Write one 14-column helper block.
 
@@ -488,17 +502,14 @@ def write_helper_block(ws, base_col, refs, window_ref, hist_range, hbin_ref):
     lr_c = CL(base_col + 1)
     st_c = CL(base_col + 3)
 
-    lo = (f'=IF({refs["min"]}="","",IF({refs["lsl"]}="",{refs["min"]},'
-          f'MIN({refs["min"]},{refs["lsl"]})))')
-    hi = (f'=IF({refs["max"]}="","",IF({refs["usl"]}="",{refs["max"]},'
-          f'MAX({refs["max"]},{refs["usl"]})))')
+    lo, hi = bin_bounds(refs["min"], refs["max"], refs["lsl"], refs["usl"])
     scal_vals = {
         "LastRow": f'={refs["lastrow"]}',
         "Start": f"=MAX({DATA_FIRST},{lr_c}1-{window_ref}+1)",
         "Lo": lo,
         "Hi": hi,
         "Width": (f'=IF(OR({lo_c}1="",{hi_c}1="",{hi_c}1<={lo_c}1),"",'
-                  f"({hi_c}1-{lo_c}1)*1.1/{hbin_ref})"),
+                  f"({hi_c}1-{lo_c}1)/{hbin_ref})"),
         "MaxCnt": f"=MAX({B('cnt')}{HELPER_FIRST}:{B('cnt')}{HELPER_FIRST+NBINS-1})",
     }
     order = ["LastRow", "Start", "Lo", "Width", "MaxCnt", "Hi"]
@@ -1043,14 +1054,15 @@ def build_visual_spc(wb):
     lo_c, wd_c, mx_c, hi_c = (CL(base + 5), CL(base + 7), CL(base + 9), CL(base + 11))
     srow_c = CL(base + 13)     # spare column holds the matched source row
 
+    vs_lo, vs_hi = bin_bounds(f'$B${R["Min"]}', f'$B${R["Max"]}', lsl, usl)
     scal = [
         ("Total", f"=MAX({rank_col})"),
         ("Start", f"=MAX(1,{tot_c}1-Settings!$F$5+1)"),
-        ("Lo", f'=IF($B${R["Min"]}="","",IF({lsl}="",$B${R["Min"]},MIN($B${R["Min"]},{lsl})))'),
+        ("Lo", vs_lo),
         ("Width", f'=IF(OR({lo_c}1="",{hi_c}1="",{hi_c}1<={lo_c}1),"",'
-                  f"({hi_c}1-{lo_c}1)*1.1/Settings!$F$6)"),
+                  f"({hi_c}1-{lo_c}1)/Settings!$F$6)"),
         ("MaxCnt", f"=MAX({B('cnt')}{HELPER_FIRST}:{B('cnt')}{HELPER_FIRST + NBINS - 1})"),
-        ("Hi", f'=IF($B${R["Max"]}="","",IF({usl}="",$B${R["Max"]},MAX($B${R["Max"]},{usl})))'),
+        ("Hi", vs_hi),
     ]
     for i, (name, formula) in enumerate(scal):
         ws.cell(row=1, column=base + i * 2, value=name).font = F_SMALL
