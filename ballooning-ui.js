@@ -451,22 +451,28 @@
           'e.g. "ollama pull gemma3:12b".', true);
         return;
       }
-      // Vision-capable families float to the top; a text-only model returns
-      // nothing useful here and the mistake is easy to make in a long list.
-      var visionish = /gemma3|llava|llama3\.2-vision|minicpm-v|qwen2?\.?5?-?vl|moondream|bakllava|pixtral|granite3\.2-vision|mistral-small3/i;
+      // Vision-capable models float to the top; picking a text-only one out of a
+      // long list is an easy mistake that fails with no useful error.
+      state.ollamaModels = {};
       models.sort(function (a, b) {
-        return (visionish.test(b) ? 1 : 0) - (visionish.test(a) ? 1 : 0) || a.localeCompare(b);
+        return (b.vision ? 1 : 0) - (a.vision ? 1 : 0) || a.name.localeCompare(b.name);
       });
       models.forEach(function (m) {
+        state.ollamaModels[m.name] = m;
+        var label = m.vision
+          ? '  (vision' + (m.thinking ? ', thinking' : '') + ')'
+          : (m.capsKnown ? '  (no vision)' : '  (text only?)');
         var o = document.createElement('option');
-        o.value = m;
-        o.textContent = m + (visionish.test(m) ? '  (vision)' : '  (text only?)');
+        o.value = m.name;
+        o.textContent = m.name + label;
         el.ollamaModel.appendChild(o);
       });
-      var vcount = models.filter(function (m) { return visionish.test(m); }).length;
+
+      var vcount = models.filter(function (m) { return m.vision; }).length;
       setStatus('Connected to Ollama — ' + models.length + ' model' + (models.length === 1 ? '' : 's') +
-        ' available' + (vcount ? ', ' + vcount + ' vision-capable.' : '. None look vision-capable; ' +
-        'a text-only model cannot read a drawing.'));
+        ' available' + (vcount
+          ? ', ' + vcount + ' vision-capable.'
+          : '. None report vision support; a text-only model cannot read a drawing.'));
     }).catch(function (err) {
       setStatus(err.message, true);
     });
@@ -496,6 +502,13 @@
     if (!state.pages.length) { setStatus('Load a PDF first.', true); return; }
     if (!el.ollamaModel.value) { setStatus('Connect to Ollama and pick a vision model first.', true); return; }
 
+    var info = (state.ollamaModels || {})[el.ollamaModel.value] || {};
+    if (info.capsKnown && !info.vision) {
+      setStatus('"' + el.ollamaModel.value + '" does not report vision support — it cannot read a ' +
+        'drawing image. Pick a vision-capable model.', true);
+      return;
+    }
+
     state.visionAbort = new AbortController();
     el.runVision.disabled = true;
     el.cancelVision.style.display = '';
@@ -509,6 +522,7 @@
       cols: parseInt(el.visionCols.value, 10) || 2,
       scale: parseFloat(el.visionScale.value) || 2.5,
       overlap: parseFloat(el.visionOverlap.value),
+      thinking: !!info.thinking,
       unit: state.opts.unit,
       generalTol: state.opts.generalTol,
       zoneRows: state.opts.zoneRows,

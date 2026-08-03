@@ -26,13 +26,35 @@
     this.endpoint = (endpoint || 'http://localhost:11434').replace(/\/+$/, '');
   }
 
+  /* Returns [{ name, capabilities, vision, thinking, capsKnown }].
+   *
+   * Capability comes from Ollama itself (/api/show reports a capabilities array),
+   * not from matching model names. Name matching cannot work: any hardcoded list
+   * is wrong the moment a new model ships, and it silently mislabels the new one
+   * as text-only — exactly the failure this replaced. The name pattern survives
+   * only as a fallback for Ollama versions predating the capabilities field. */
   OllamaClient.prototype.listModels = function () {
+    var self = this;
     return fetch(this.endpoint + '/api/tags')
       .then(function (r) {
         if (!r.ok) throw new Error('Ollama returned HTTP ' + r.status);
         return r.json();
       })
-      .then(function (j) { return (j.models || []).map(function (m) { return m.name; }); })
+      .then(function (j) {
+        var names = (j.models || []).map(function (m) { return m.name; });
+        return Promise.all(names.map(function (n) {
+          return self.showModel(n).then(function (caps) {
+            var known = caps.length > 0;
+            return {
+              name: n,
+              capabilities: caps,
+              capsKnown: known,
+              vision: known ? caps.indexOf('vision') !== -1 : VISION_NAME_RE.test(n),
+              thinking: caps.indexOf('thinking') !== -1
+            };
+          });
+        }));
+      })
       .catch(function (err) {
         // A browser CORS rejection surfaces as an opaque TypeError; say what it
         // actually means rather than leaking "Failed to fetch" to the operator.
@@ -40,19 +62,43 @@
       });
   };
 
-  OllamaClient.prototype.vision = function (model, prompt, imageBase64, signal) {
+  OllamaClient.prototype.showModel = function (name) {
+    return fetch(this.endpoint + '/api/show', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: name })
+    })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { return (j && Array.isArray(j.capabilities)) ? j.capabilities : []; })
+      // An older Ollama has no /api/show capabilities; degrade to the name test
+      // rather than failing the whole listing.
+      .catch(function () { return []; });
+  };
+
+  // Fallback only — used when Ollama does not report capabilities.
+  var VISION_NAME_RE = /gemma[3-9]\d*|llava|llama3\.2-vision|minicpm-v|qwen2?\.?5?-?vl|moondream|bakllava|pixtral|granite3\.2-vision|mistral-small3/i;
+
+  OllamaClient.prototype.vision = function (model, prompt, imageBase64, signal, thinking) {
+    var body = {
+      model: model,
+      prompt: prompt,
+      images: [imageBase64],
+      stream: false,
+      format: 'json',
+      options: { temperature: 0, num_predict: 2048 }
+    };
+
+    /* Transcription is not a reasoning task, and a thinking model deliberating
+     * over every tile turns a dozen regions into a long wait for no accuracy
+     * gain. Only sent when the model actually reports the capability — older
+     * Ollama builds reject the field outright on models that lack it. */
+    if (thinking) body.think = false;
+
     return fetch(this.endpoint + '/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: signal,
-      body: JSON.stringify({
-        model: model,
-        prompt: prompt,
-        images: [imageBase64],
-        stream: false,
-        format: 'json',
-        options: { temperature: 0, num_predict: 2048 }
-      })
+      body: JSON.stringify(body)
     }).then(function (r) {
       if (!r.ok) {
         return r.text().then(function (t) {
@@ -268,7 +314,7 @@
           if (opts.signal && opts.signal.aborted) throw new DOMException('Aborted', 'AbortError');
           report(i, tiles.length, 'Reading region ' + (i + 1) + ' of ' + tiles.length + ' …');
 
-          return client.vision(opts.model, PROMPT, toBase64(tile.canvas), opts.signal)
+          return client.vision(opts.model, PROMPT, toBase64(tile.canvas), opts.signal, opts.thinking)
             .then(function (raw) {
               parseResponse(raw).forEach(function (item) {
                 found.push(mapToPage(item, tile, pageIndex, loader, opts));
@@ -366,6 +412,7 @@
     runVisionPass: runVisionPass,
     isDuplicate: isDuplicate,
     iou: iou,
+    VISION_NAME_RE: VISION_NAME_RE,
     PROMPT: PROMPT
   };
 

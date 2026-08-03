@@ -128,8 +128,13 @@ vendor, nothing leaves the shop.
 **Setup**
 
 ```bash
-ollama pull gemma3:12b        # 12B, multimodal. gemma3:27b reads small text noticeably better.
+ollama pull gemma4:12b        # multimodal. The larger 26b/31b variants read small text better.
 ```
+
+Any vision-capable model works — the model list is populated from your Ollama and
+labelled with **real capabilities** reported by `/api/show`, not by matching model
+names against a hardcoded list. Text-only models are labelled `(no vision)` and
+refused if selected, rather than failing with an unhelpful error mid-pass.
 
 Ollama blocks cross-origin browser requests by default, so allow this page's
 origin and restart it:
@@ -172,6 +177,9 @@ Then: **Connect** → pick the model → **Run vision pass on this sheet**. The
   suppressed is reported, so a genuinely repeated callout is not lost silently.
 - **Everything is flagged.** Vision results get purple balloons and a permanent
   review flag. They are a starting point for the operator, not a result.
+- **Thinking is switched off** on models that support it. Transcription is not a
+  reasoning task, and deliberating over every tile costs minutes across a tiled
+  sheet for no accuracy gain.
 
 **Expectations.** A 12B model reading a dense D-size drawing will miss callouts
 and misread digits — small vision models are weakest at exactly what matters
